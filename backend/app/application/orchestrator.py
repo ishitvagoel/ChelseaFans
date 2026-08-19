@@ -36,9 +36,10 @@ class ProviderOrchestrator:
         if isinstance(cached, list) and cached:
             return [match_from_dict(item) for item in cached]
         snapshot = await self._snapshots.get(cache_key)
-        if snapshot and isinstance(snapshot.payload.get("matches"), list):
-            matches = [match_from_dict(item) for item in snapshot.payload["matches"]]
-            await self._cache.set_json(cache_key, snapshot.payload["matches"], JUST_FINISHED_TTL)
+        stored = snapshot.payload.get("matches") if snapshot else None
+        if isinstance(stored, list) and stored:
+            matches = [match_from_dict(item) for item in stored]
+            await self._cache.set_json(cache_key, stored, JUST_FINISHED_TTL)
             return matches
 
         matches = await self._load_fixtures(limit)
@@ -76,6 +77,8 @@ class ProviderOrchestrator:
             except Exception:
                 logger.exception("snapshot persist failed for %s", match.id)
         payload = [match_to_dict(m) for m in enriched]
+        if not payload:
+            return enriched
         try:
             await self._cache.set_json(cache_key, payload, JUST_FINISHED_TTL)
             await self._snapshots.put(

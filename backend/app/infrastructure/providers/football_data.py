@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from app.domain.models import (
     ClubRef,
@@ -10,8 +10,23 @@ from app.domain.models import (
     MatchEvent,
     MatchStatus,
     Score,
+    TeamContext,
 )
 from app.infrastructure.http.rate_limit import RateLimitedClient
+
+# football-data.org defaults /teams/{id}/matches to a future window when
+# dateFrom/dateTo are omitted, so FINISHED returns nothing in-season.
+FINISHED_LOOKBACK_DAYS = 400
+
+
+def finished_match_query_params() -> dict[str, str]:
+    end = datetime.now(UTC).date()
+    start = end - timedelta(days=FINISHED_LOOKBACK_DAYS)
+    return {
+        "status": "FINISHED",
+        "dateFrom": start.isoformat(),
+        "dateTo": end.isoformat(),
+    }
 
 
 class FootballDataProvider:
@@ -36,22 +51,20 @@ class FootballDataProvider:
             "GET",
             url,
             headers={"X-Auth-Token": self._api_key},
-            params={"status": "FINISHED", "limit": str(limit)},
+            params=finished_match_query_params(),
         )
         if response.status_code >= 400:
             return []
         data = response.json()
         matches = []
-        for item in data.get("matches", [])[:limit]:
+        for item in data.get("matches", []):
             mapped = _map_match(item)
-            if mapped is not None:
+            if mapped is not None and mapped.status == MatchStatus.FINISHED:
                 matches.append(mapped)
         matches.sort(key=lambda m: m.utc_kickoff, reverse=True)
         return matches[:limit]
 
-    async def chelsea_context(self):
-        from app.domain.models import TeamContext
-
+    async def chelsea_context(self) -> TeamContext | None:
         if not self._api_key:
             return None
         url = "https://api.football-data.org/v4/competitions/PL/standings"

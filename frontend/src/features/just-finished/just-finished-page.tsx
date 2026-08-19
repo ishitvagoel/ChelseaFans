@@ -4,10 +4,12 @@ import { fetchContext, fetchJustFinished } from "../../lib/api";
 import type { Match, TeamContext } from "../../lib/api-types";
 import { MatchCard } from "../../components/match-card";
 import { PageHero } from "../../components/page-hero";
+import { useDemoMode } from "../../components/demo-mode";
 import { MatchListSkeleton } from "../../components/skeletons";
 import { TeamContextCard } from "../../components/team-context-card";
 
 export function JustFinishedPage() {
+  const { demo } = useDemoMode();
   const [matches, setMatches] = useState<Match[]>([]);
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +30,9 @@ export function JustFinishedPage() {
   return (
     <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
       <PageHero kicker="Match centre" title="Just Finished">
-        The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can
-        explore the product before connecting live keys.
+        {demo
+          ? "The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can explore the product before connecting live keys."
+          : "The last Chelsea results, with events and the ratings that mattered."}
       </PageHero>
       <TeamContextCard context={loading ? null : context} />
       {loading ? <MatchListSkeleton /> : null}

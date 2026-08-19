@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { formatNumber } from "../../lib/utils";
 
 const PALETTE = ["#DBA111", "#6ea8ff", "#ED1C24", "#9ae6b4"];
-const SEASONS = ["2023/24", "2024/25"] as const;
+const SEASONS = ["2023/24", "2024/25", "2025/26"] as const;
 
 export function ComparisonPage() {
   const [query, setQuery] = useState("");
