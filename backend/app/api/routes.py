@@ -23,9 +23,16 @@ async def meta(request: Request) -> MetaDto:
     demo = bool(request.app.state.container.demo)
     if demo:
         message = "Sample data is enabled (USE_DEMO_DATA=true). Live sports APIs are not called."
+        notes: list[str] = []
     else:
         message = "Live providers are enabled. Set USE_DEMO_DATA=true to force sample data."
-    return MetaDto(demo=demo, message=message)
+        notes = [
+            "football-data.org free: fixtures, scores, PL table (~10 req/min; no lineups on base free).",
+            "API-Football free: player ratings on seasons 2022–2024 only (~100 req/day).",
+            "StatsBomb open data: optional historical events when match id is mapped.",
+            "openfootball: fallback scores from public JSON dumps.",
+        ]
+    return MetaDto(demo=demo, message=message, provider_notes=notes)
 
 
 @router.get("/chelsea/just-finished", response_model=list[MatchDto])

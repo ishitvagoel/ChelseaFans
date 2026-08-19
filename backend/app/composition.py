@@ -14,11 +14,12 @@ from app.infrastructure.cache.redis_cache import RedisCache
 from app.infrastructure.cache.upstash import UpstashRestCache
 from app.infrastructure.db.engine import create_schema, make_engine, make_session_factory
 from app.infrastructure.db.null_repository import NullSnapshotRepository
-from app.infrastructure.db.repository import SqlAlchemySnapshotRepository
+from app.infrastructure.db.repository import SqlModelSnapshotRepository
 from app.infrastructure.demo.provider import DemoProvider
 from app.infrastructure.directory import CompositePlayerDirectory
 from app.infrastructure.http.rate_limit import RateLimitedClient
 from app.infrastructure.providers.api_football import ApiFootballProvider
+from app.infrastructure.providers.api_football_fixtures import ApiFootballFixtureProvider
 from app.infrastructure.providers.football_data import FootballDataProvider
 from app.infrastructure.providers.openfootball import OpenFootballProvider
 from app.infrastructure.providers.statsbomb import StatsBombProvider
@@ -90,6 +91,15 @@ def _register_live(registry: ProviderRegistry, settings: Settings) -> list[RateL
         registry.register_fixtures(football_data)
         registry.register_team_context(football_data)
     registry.register_fixtures(openfootball)
+    if settings.api_football_key:
+        registry.register_fixtures(
+            ApiFootballFixtureProvider(
+                af_http,
+                settings.api_football_key,
+                settings.chelsea_api_football_team_id,
+                settings.api_football_base_url,
+            )
+        )
     registry.register_player_match_stats(api_football)
     registry.register_season_stats(api_football)
     registry.register_historical_events(statsbomb)
@@ -114,6 +124,6 @@ async def _build_snapshots(settings: Settings) -> tuple[ISnapshotRepository, obj
         engine = make_engine(settings.database_url)
         await create_schema(engine)
         factory = make_session_factory(engine)
-        return SqlAlchemySnapshotRepository(factory), engine
+        return SqlModelSnapshotRepository(factory), engine
     except Exception:
         return NullSnapshotRepository(), None

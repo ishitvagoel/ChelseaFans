@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class MetaDto(BaseModel):
     demo: bool
     message: str
+    provider_notes: list[str] = Field(default_factory=list)
 
 
 class ConfidenceDto(BaseModel):

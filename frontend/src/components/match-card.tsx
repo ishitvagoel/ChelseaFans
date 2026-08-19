@@ -7,6 +7,17 @@ function isChelsea(name: string): boolean {
   return name.toLowerCase().includes("chelsea");
 }
 
+function topRatedRows(stats: PlayerMatchStats[]): PlayerMatchStats[] {
+  const rated = stats.filter((row) => row.rating !== null);
+  if (rated.length > 0) {
+    return [...rated].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 4);
+  }
+  return [...stats]
+    .filter((row) => row.minutes !== null || row.goals !== null || row.assists !== null)
+    .sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0) || (b.minutes ?? 0) - (a.minutes ?? 0))
+    .slice(0, 4);
+}
+
 export function MatchCard({ match }: { match: Match }) {
   const score = match.score;
   const chelseaHome = isChelsea(match.home.name);
@@ -15,10 +26,7 @@ export function MatchCard({ match }: { match: Match }) {
     ((chelseaHome && score.home > score.away) || (!chelseaHome && score.away > score.home));
   const draw = score !== null && score.home === score.away;
   const resultLabel = score === null ? "No score" : chelseaWon ? "Win" : draw ? "Draw" : "Loss";
-  const top = [...match.player_stats]
-    .filter((row) => row.rating !== null)
-    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-    .slice(0, 4);
+  const top = topRatedRows(match.player_stats);
 
   return (
     <Card className="overflow-hidden transition duration-300 md:hover:-translate-y-0.5">
@@ -38,7 +46,7 @@ export function MatchCard({ match }: { match: Match }) {
             </summary>
             <div className="grid gap-4 px-4 pb-4">
               <EventList events={match.events} />
-              <RatingList rows={top} />
+              <RatingList rows={top} totalCount={match.player_stats.length} />
             </div>
           </details>
         </div>
@@ -61,7 +69,7 @@ export function MatchCard({ match }: { match: Match }) {
           </div>
           <div className="grid gap-5 xl:grid-cols-2">
             <EventList events={match.events} />
-            <RatingList rows={top} />
+            <RatingList rows={top} totalCount={match.player_stats.length} />
           </div>
         </div>
 
@@ -116,22 +124,33 @@ function EventList({ events }: { events: MatchEvent[] }) {
   );
 }
 
-function RatingList({ rows }: { rows: PlayerMatchStats[] }) {
+function RatingList({ rows, totalCount }: { rows: PlayerMatchStats[]; totalCount: number }) {
   return (
     <div>
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Key ratings</p>
       <ul className="space-y-2">
-        {rows.map((row) => (
-          <li key={row.player.id} className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2">
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">{row.player.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {row.player.position ?? "Player"} · {formatNumber(row.minutes)}′
-              </span>
-            </span>
-            <span className="font-display text-2xl tabular-nums text-chelsea-gold">{formatNumber(row.rating, 1)}</span>
+        {rows.length === 0 ? (
+          <li className="rounded-xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            {totalCount > 0
+              ? "Player stats returned without ratings for this fixture."
+              : "No player ratings for this fixture on the free API-Football tier (seasons 2022–2024 only)."}
           </li>
-        ))}
+        ) : (
+          rows.map((row) => (
+            <li key={row.player.id} className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{row.player.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {row.player.position ?? "Player"} · {formatNumber(row.minutes)}′
+                  {row.goals ? ` · ${row.goals}G` : ""}
+                </span>
+              </span>
+              <span className="font-display text-2xl tabular-nums text-chelsea-gold">
+                {row.rating !== null ? formatNumber(row.rating, 1) : "—"}
+              </span>
+            </li>
+          ))
+        )}
       </ul>
     </div>
   );

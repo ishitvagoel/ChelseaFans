@@ -20,7 +20,7 @@ async def test_orchestrator_uses_cache() -> None:
     cache = InMemoryCache()
     orch = ProviderOrchestrator(registry, cache, NullSnapshotRepository())
     first = await orch.just_finished(3)
-    cached = await cache.get_json("chelsea:just-finished:3")
+    cached = await cache.get_json("chelsea:just-finished:v3:3")
     assert cached is not None
     second = await orch.just_finished(3)
     assert [m.id for m in first] == [m.id for m in second]
