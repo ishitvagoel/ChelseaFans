@@ -18,6 +18,7 @@ import {
 import { fetchComparison, fetchContext, searchPlayers } from "../../lib/api";
 import type { ComparisonResult, Player, TeamContext } from "../../lib/api-types";
 import { TeamContextCard } from "../../components/team-context-card";
+import { useDemoMode } from "../../components/demo-mode";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
@@ -34,6 +35,8 @@ export function ComparisonPage() {
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { demo } = useDemoMode();
+  const [seeded, setSeeded] = useState(false);
 
   useEffect(() => {
     void fetchContext().then(setContext).catch(() => setContext(null));
@@ -42,11 +45,17 @@ export function ComparisonPage() {
   useEffect(() => {
     const handle = window.setTimeout(() => {
       void searchPlayers(query)
-        .then(setOptions)
+        .then((players) => {
+          setOptions(players);
+          if (demo && !seeded && query === "" && players.length > 0) {
+            setSelected(players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)));
+            setSeeded(true);
+          }
+        })
         .catch(() => setOptions([]));
     }, 200);
     return () => window.clearTimeout(handle);
-  }, [query]);
+  }, [query, demo, seeded]);
 
   useEffect(() => {
     if (selected.length === 0) {
@@ -99,6 +108,7 @@ export function ComparisonPage() {
         <h1 className="font-display text-4xl sm:text-5xl">Player comparison</h1>
         <p className="mt-2 max-w-2xl text-muted-foreground">
           Select 1–4 Chelsea players. Season filters apply to the left-hand metrics; career stays on the right.
+          Demo mode pre-selects sample players so charts load immediately.
         </p>
       </div>
       <TeamContextCard context={context} />

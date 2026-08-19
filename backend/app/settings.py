@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     chelsea_football_data_team_id: int = 61
     chelsea_api_football_team_id: int = 49
+    # Exclusive sample-data mode. Keep true until live sports API keys are configured.
     use_demo_data: bool = True
 
     def cors_origin_list(self) -> list[str]:

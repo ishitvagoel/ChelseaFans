@@ -29,8 +29,8 @@ export function JustFinishedPage() {
         <p className="text-sm uppercase tracking-[0.2em] text-chelsea-gold">Recent results</p>
         <h1 className="font-display text-4xl sm:text-5xl">Just Finished</h1>
         <p className="mt-2 max-w-2xl text-muted-foreground">
-          Last Chelsea matches with scores, events, and key player ratings — fused from multiple sources
-          when keys are configured, otherwise demo data.
+          Last Chelsea matches with scores, events, and key player ratings. With demo mode on, this is curated sample
+          data — no live sports API keys required.
         </p>
       </div>
       <TeamContextCard context={context} />

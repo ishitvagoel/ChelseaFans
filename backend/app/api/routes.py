@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 
 from app.api.mappers import comparison_dto, context_dto, match_dto, player_dto
-from app.api.schemas import ComparisonDto, MatchDto, PlayerDto, TeamContextDto
+from app.api.schemas import ComparisonDto, MatchDto, MetaDto, PlayerDto, TeamContextDto
 from app.application.comparison import ComparisonService
 from app.application.just_finished import JustFinishedService
 
@@ -16,6 +16,16 @@ def _just(request: Request) -> JustFinishedService:
 
 def _compare(request: Request) -> ComparisonService:
     return request.app.state.container.comparison
+
+
+@router.get("/meta", response_model=MetaDto)
+async def meta(request: Request) -> MetaDto:
+    demo = bool(request.app.state.container.demo)
+    if demo:
+        message = "Sample data is enabled (USE_DEMO_DATA=true). Live sports APIs are not called."
+    else:
+        message = "Live providers are enabled. Set USE_DEMO_DATA=true to force sample data."
+    return MetaDto(demo=demo, message=message)
 
 
 @router.get("/chelsea/just-finished", response_model=list[MatchDto])

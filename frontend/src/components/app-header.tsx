@@ -1,11 +1,14 @@
 import { Link, NavLink } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { useDemoMode } from "./demo-mode";
 import { useTheme } from "./theme-provider";
 
 export function AppHeader() {
   const { theme, toggle } = useTheme();
+  const { demo } = useDemoMode();
 
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-chelsea-navy/80 backdrop-blur-md">
@@ -18,6 +21,7 @@ export function AppHeader() {
             <p className="font-display text-lg leading-none text-white">Chelsea Stats</p>
             <p className="text-xs text-white/70">Just finished · historical compare</p>
           </div>
+          {demo ? <Badge className="hidden sm:inline-flex">Demo</Badge> : null}
         </Link>
         <nav className="flex items-center gap-2">
           <NavLink

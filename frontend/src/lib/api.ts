@@ -1,4 +1,4 @@
-import type { ComparisonResult, Match, Player, TeamContext } from "./api-types";
+import type { AppMeta, ComparisonResult, Match, Player, TeamContext } from "./api-types";
 
 const BASE =
   import.meta.env.VITE_API_BASE_URL ??
@@ -10,6 +10,10 @@ async function getJson<T>(path: string): Promise<T> {
     throw new Error(`Request failed ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+export function fetchMeta(): Promise<AppMeta> {
+  return getJson("/v1/meta");
 }
 
 export function fetchJustFinished(limit = 8): Promise<Match[]> {

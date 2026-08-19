@@ -64,7 +64,7 @@ Specialized personas and hand-offs live in [AGENTS.md](AGENTS.md). The Architect
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # USE_DEMO_DATA=true works with no keys
+cp .env.example .env   # USE_DEMO_DATA=true is exclusive sample data; set false after adding keys
 uvicorn app.main:app --reload --port 8000
 
 # optional Redis

@@ -7,7 +7,9 @@ The repo root [`vercel.json`](../vercel.json) uses [Vercel Services](https://ver
 - `/v1/*`, `/health`, `/docs`, `/openapi.json` → FastAPI
 - everything else → the SPA
 
-Same-origin fetches mean you do **not** set `VITE_API_BASE_URL` on Vercel. Demo mode (`USE_DEMO_DATA=true` by default) works with no sports API keys.
+Same-origin fetches mean you do **not** set `VITE_API_BASE_URL` on Vercel.
+
+**Demo flag:** `USE_DEMO_DATA=true` (default) serves sample data for every screen and never calls football-data.org or API-Football. Set it to `false` only after adding live keys.
 
 ```bash
 npx vercel --prod --yes

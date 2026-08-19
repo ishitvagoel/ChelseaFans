@@ -3,6 +3,11 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class MetaDto(BaseModel):
+    demo: bool
+    message: str
+
+
 class ConfidenceDto(BaseModel):
     source: str
     score: float
