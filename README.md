@@ -88,6 +88,8 @@ cd frontend && npm test
 
 ## Deploy
 
+Live: **https://chelsea-pocket.vercel.app** (Vercel project `chelsea-pocket`).
+
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (Vercel Services: frontend + FastAPI on one domain) and [docs/FREE_TIER.md](docs/FREE_TIER.md).
 
 Frontend types should stay aligned with FastAPI OpenAPI (`GET /openapi.json` → `frontend/src/lib/api-types.ts`).

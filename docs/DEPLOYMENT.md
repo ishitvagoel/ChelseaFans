@@ -4,6 +4,8 @@
 
 The repo root [`vercel.json`](../vercel.json) uses [Vercel Services](https://vercel.com/docs/services): Vite (`frontend/`) plus FastAPI (`backend/`) on one domain.
 
+**Production URL:** [https://chelsea-pocket.vercel.app](https://chelsea-pocket.vercel.app) (project name `chelsea-pocket`). The previous default host `workspace-mu-one-49.vercel.app` 308-redirects there.
+
 - `/v1/*`, `/health`, `/docs`, `/openapi.json` → FastAPI
 - everything else → the SPA
 
