@@ -168,6 +168,50 @@ class ApiFootballPlayersResponse(ApiFootballEnvelope):
     response: list[ApiFootballPlayerBlock] = Field(default_factory=list)
 
 
+class ApiFootballEventTime(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    elapsed: int | str | None = None
+    extra: int | str | None = None
+
+
+class ApiFootballEventRecord(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    time: ApiFootballEventTime | None = None
+    team: ApiFootballTeamInfo | None = None
+    player: ApiFootballPlayerRef | None = None
+    assist: ApiFootballPlayerRef | None = None
+    type: str | None = None
+    detail: str | None = None
+
+
+class ApiFootballEventsResponse(ApiFootballEnvelope):
+    response: list[ApiFootballEventRecord] = Field(default_factory=list)
+
+
+class ApiFootballSquadPlayer(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    name: str | None = None
+    age: int | None = None
+    number: int | None = None
+    position: str | None = None
+    photo: str | None = None
+
+
+class ApiFootballSquadBlock(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    team: ApiFootballTeamInfo | None = None
+    players: list[ApiFootballSquadPlayer] = Field(default_factory=list)
+
+
+class ApiFootballSquadsResponse(ApiFootballEnvelope):
+    response: list[ApiFootballSquadBlock] = Field(default_factory=list)
+
+
 class ApiFootballSubscription(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

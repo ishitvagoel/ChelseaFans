@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
-JUST_FINISHED_CACHE_VERSION = "v4"
+JUST_FINISHED_CACHE_VERSION = "v5"
 
 
 class ProviderOrchestrator:
@@ -36,20 +36,16 @@ class ProviderOrchestrator:
         cached = await self._cache.get_json(cache_key)
         if isinstance(cached, list) and cached:
             matches = [match_from_dict(item) for item in cached]
-            if self._needs_stats_backfill(matches):
-                matches = await self._backfill_player_stats(matches)
-                await self._persist_just_finished(cache_key, matches)
+            matches = await self._backfill_if_needed(matches)
+            await self._persist_just_finished(cache_key, matches)
             return matches
 
         snapshot = await self._snapshots.get(cache_key)
         stored = snapshot.payload.get("matches") if snapshot else None
         if isinstance(stored, list) and stored:
             matches = [match_from_dict(item) for item in stored]
-            if self._needs_stats_backfill(matches):
-                matches = await self._backfill_player_stats(matches)
-                await self._persist_just_finished(cache_key, matches)
-            else:
-                await self._cache.set_json(cache_key, stored, JUST_FINISHED_TTL)
+            matches = await self._backfill_if_needed(matches)
+            await self._persist_just_finished(cache_key, matches)
             return matches
 
         primary = await self._load_primary_fixtures(limit)
@@ -177,6 +173,48 @@ class ProviderOrchestrator:
         if any(match.player_stats for match in matches):
             return False
         return any(provider.name == "api-football" for provider in self._registry.player_match_stats)
+
+    def _needs_events_backfill(self, matches: list[Match]) -> bool:
+        if not matches:
+            return False
+        if any(match.events for match in matches):
+            return False
+        return any(provider.name == "api-football" for provider in self._registry.historical_events)
+
+    async def _backfill_if_needed(self, matches: list[Match]) -> list[Match]:
+        updated = matches
+        if self._needs_stats_backfill(updated):
+            updated = await self._backfill_player_stats(updated)
+        if self._needs_events_backfill(updated):
+            updated = await self._backfill_events(updated)
+        return updated
+
+    async def _backfill_events(self, matches: list[Match]) -> list[Match]:
+        updated: list[Match] = []
+        changed = False
+        for match in matches:
+            extra = await self._enrich_events(match)
+            if extra:
+                changed = True
+                updated.append(
+                    Match(
+                        id=match.id,
+                        utc_kickoff=match.utc_kickoff,
+                        competition=match.competition,
+                        home=match.home,
+                        away=match.away,
+                        score=match.score,
+                        status=match.status,
+                        events=match.events + tuple(extra),
+                        player_stats=match.player_stats,
+                        venue=match.venue,
+                        matchday=match.matchday,
+                        sources=match.sources,
+                    )
+                )
+            else:
+                updated.append(match)
+        return updated if changed else matches
 
     async def _backfill_player_stats(self, matches: list[Match]) -> list[Match]:
         updated: list[Match] = []

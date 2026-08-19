@@ -26,7 +26,8 @@ import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { formatNumber } from "../../lib/utils";
 
 const PALETTE = ["#DBA111", "#6ea8ff", "#ED1C24", "#9ae6b4"];
-const SEASONS = ["2023/24", "2024/25", "2025/26"] as const;
+const SEASONS = ["2022/23", "2023/24", "2024/25"] as const;
+const LIVE_SEED_NAMES = ["palmer", "caicedo", "jackson", "neto", "colwill"];
 
 export function ComparisonPage() {
   const [query, setQuery] = useState("");
@@ -51,10 +52,18 @@ export function ComparisonPage() {
       void searchPlayers(query)
         .then((players) => {
           setOptions(players);
-          if (demo && !seeded && query === "" && players.length > 0) {
-            setSelected(
-              players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)),
-            );
+          if (!seeded && query === "" && players.length > 0) {
+            if (demo) {
+              setSelected(
+                players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)),
+              );
+            } else {
+              const live = players.filter((p) => p.id.startsWith("af-"));
+              const seededLive = LIVE_SEED_NAMES.map((name) =>
+                live.find((p) => p.name.toLowerCase().includes(name)),
+              ).filter((p): p is Player => Boolean(p));
+              setSelected(seededLive.slice(0, 3).length ? seededLive.slice(0, 3) : live.slice(0, 3));
+            }
             setSeeded(true);
           }
         })
@@ -111,7 +120,9 @@ export function ComparisonPage() {
     <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
       <PageHero kicker="Historical lens" title="Player comparison">
         Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics; career totals stay on the right.
-        {demo ? " Sample players are pre-selected so the charts appear immediately." : ""}
+        {demo
+          ? " Sample players are pre-selected so the charts appear immediately."
+          : " Live comparison uses API-Football free-tier seasons (2022–2024)."}
       </PageHero>
       <TeamContextCard context={context} />
       <Card>

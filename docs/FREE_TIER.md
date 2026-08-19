@@ -39,8 +39,8 @@ football-data.org supplies current-season scores. API-Football free tier cannot 
 
 ## Caching policy
 
-- `chelsea:just-finished:v4:{limit}` — 6 hours (safe; finished results)
-- `fixture:{match.id}:player_stats:v4` — 7 days (full stat payload)
+- `chelsea:just-finished:v5:{limit}` — 6 hours (safe; finished results)
+- `fixture:{match.id}:player_stats:v5` — 7 days (full stat payload)
 - `chelsea:context` — 1 hour
 - `players:search:{q}` — 1 hour
 - Never cache HTTP 429/5xx as a successful empty payload

@@ -13,18 +13,17 @@ class ComparisonService:
 
     async def search(self, query: str) -> list[Player]:
         q = query.strip()
-        if len(q) < 1:
-            return await self._directory.search("")
         found: dict[str, Player] = {}
         for player in await self._directory.search(q):
-            found[player.id] = player
+            if not player.id.startswith("demo-") or q:
+                found[player.id] = player
         for provider in self._registry.season_stats:
             try:
                 for player in await provider.search_players(q):
                     found.setdefault(player.id, player)
             except Exception:
                 continue
-        return list(found.values())[:20]
+        return list(found.values())[:40]
 
     async def compare(
         self,

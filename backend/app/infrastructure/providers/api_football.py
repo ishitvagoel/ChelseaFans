@@ -4,23 +4,25 @@ import logging
 from datetime import UTC, datetime
 
 from app.domain.models import (
+    EventType,
+    MatchEvent,
     Player,
     PlayerMatchStats,
     SeasonTotals,
 )
 from app.infrastructure.http.rate_limit import RateLimitedClient
 from app.infrastructure.providers.api_football_helpers import (
+    API_FOOTBALL_FREE_SEASONS,
     season_accessible_on_free_tier,
     season_start_year,
 )
-from app.infrastructure.providers.api_football_fixtures import (
-    ApiFootballFixtureProvider,
-    fixture_item_matches_clubs,
-)
+from app.infrastructure.providers.api_football_fixtures import fixture_item_matches_clubs
 from app.infrastructure.providers.contracts.api_football import (
+    ApiFootballEventsResponse,
     ApiFootballFixturePlayersResponse,
     ApiFootballFixturesResponse,
     ApiFootballPlayersResponse,
+    ApiFootballSquadsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,30 @@ class ApiFootballProvider:
         stats.sort(key=lambda stat: (stat.rating is None, -(stat.rating or 0)))
         return stats[:12]
 
+    async def events_for_match(self, match) -> list[MatchEvent]:
+        if not self._api_key:
+            return []
+        fixture_id = await self._resolve_fixture_id(match)
+        if fixture_id is None:
+            return []
+        response = await self._client.request(
+            "GET",
+            f"{self._base}/fixtures/events",
+            headers=self._headers(),
+            params={"fixture": str(fixture_id)},
+        )
+        if response.status_code >= 400:
+            return []
+        payload = ApiFootballEventsResponse.model_validate(response.json())
+        if payload.plan_error():
+            logger.info("api-football events blocked: %s", payload.plan_error())
+            return []
+        events: list[MatchEvent] = []
+        for item in payload.response:
+            mapped = _map_event(item)
+            events.extend(mapped)
+        return events[:20]
+
     async def season_totals(
         self,
         *,
@@ -97,58 +123,96 @@ class ApiFootballProvider:
         if not player_id.startswith("af-"):
             return []
         external_id = player_id.removeprefix("af-")
-        season = _season_start_year(season_to or season_from)
-        if season not in range(2022, 2025):
-            return []
-        response = await self._client.request(
-            "GET",
-            f"{self._base}/players",
-            headers=self._headers(),
-            params={"id": external_id, "season": str(season)},
-        )
-        if response.status_code >= 400:
-            return []
-        payload = ApiFootballPlayersResponse.model_validate(response.json())
-        if payload.plan_error():
-            return []
+        from_year = _season_start_year(season_from) if season_from else 2023
+        to_year = _season_start_year(season_to) if season_to else 2024
+        if from_year > to_year:
+            from_year, to_year = to_year, from_year
+        seasons = [year for year in range(from_year, to_year + 1) if year in API_FOOTBALL_FREE_SEASONS]
+        if not seasons:
+            seasons = [2024]
         rows: list[SeasonTotals] = []
-        for block in payload.response:
-            player = _player_from_af(block.player.model_dump() if block.player else {})
-            if player is None:
+        for season in seasons:
+            response = await self._client.request(
+                "GET",
+                f"{self._base}/players",
+                headers=self._headers(),
+                params={"id": external_id, "season": str(season)},
+            )
+            if response.status_code >= 400:
                 continue
-            for stat in block.statistics:
-                rows.append(
-                    _season_from_af(
-                        player,
-                        stat.model_dump(),
-                        f"{season}/{str(season + 1)[-2:]}",
+            payload = ApiFootballPlayersResponse.model_validate(response.json())
+            if payload.plan_error():
+                continue
+            for block in payload.response:
+                player = _player_from_af(block.player.model_dump() if block.player else {})
+                if player is None:
+                    continue
+                for stat in block.statistics:
+                    rows.append(
+                        _season_from_af(
+                            player,
+                            stat.model_dump(),
+                            f"{season}/{str(season + 1)[-2:]}",
+                        )
                     )
-                )
         return rows
 
     async def search_players(self, query: str) -> list[Player]:
-        if not self._api_key or len(query.strip()) < 3:
+        if not self._api_key:
             return []
+        q = query.strip()
+        if len(q) < 2:
+            return await self._list_squad()
         season = _season_start_year(None)
-        if season not in range(2022, 2025):
+        if season not in API_FOOTBALL_FREE_SEASONS:
             season = 2024
         response = await self._client.request(
             "GET",
             f"{self._base}/players",
             headers=self._headers(),
-            params={"search": query.strip(), "team": str(self._team_id), "season": str(season)},
+            params={"search": q, "team": str(self._team_id), "season": str(season)},
         )
         if response.status_code >= 400:
-            return []
+            return await self._list_squad(q)
         payload = ApiFootballPlayersResponse.model_validate(response.json())
         if payload.plan_error():
-            return []
+            return await self._list_squad(q)
         players: list[Player] = []
         for block in payload.response:
             player = _player_from_af(block.player.model_dump() if block.player else {})
             if player:
                 players.append(player)
-        return players[:10]
+        return players[:20] if players else await self._list_squad(q)
+
+    async def _list_squad(self, query: str = "") -> list[Player]:
+        response = await self._client.request(
+            "GET",
+            f"{self._base}/players/squads",
+            headers=self._headers(),
+            params={"team": str(self._team_id)},
+        )
+        if response.status_code >= 400:
+            return []
+        payload = ApiFootballSquadsResponse.model_validate(response.json())
+        if payload.plan_error() or not payload.response:
+            return []
+        q = query.lower().strip()
+        players: list[Player] = []
+        for block in payload.response:
+            for raw in block.players:
+                if raw.id is None or not raw.name:
+                    continue
+                if q and q not in raw.name.lower():
+                    continue
+                players.append(
+                    Player(
+                        id=f"af-{raw.id}",
+                        name=raw.name,
+                        position=raw.position,
+                        shirt_number=raw.number,
+                    )
+                )
+        return players[:40]
 
     async def _resolve_fixture_id(self, match) -> int | None:
         raw_id = match.id
@@ -249,6 +313,26 @@ def _season_from_af(player: Player, stat: dict, season: str) -> SeasonTotals:
         rating=float(rating_raw) if rating_raw not in (None, "") else None,
         source="api-football",
     )
+
+
+def _map_event(item) -> list[MatchEvent]:
+    kind = (item.type or "").lower()
+    detail = item.detail
+    player_name = item.player.name if item.player else None
+    minute = _int_or_none(item.time.elapsed if item.time else None)
+    events: list[MatchEvent] = []
+    if kind == "goal":
+        events.append(MatchEvent(minute, EventType.GOAL, player_name, detail))
+        assist_name = item.assist.name if item.assist else None
+        if assist_name:
+            events.append(MatchEvent(minute, EventType.ASSIST, assist_name, "Assist"))
+    elif kind == "card":
+        events.append(MatchEvent(minute, EventType.CARD, player_name, detail))
+    elif kind in {"subst", "substitution"}:
+        events.append(MatchEvent(minute, EventType.SUBSTITUTION, player_name, detail))
+    else:
+        events.append(MatchEvent(minute, EventType.OTHER, player_name, detail or item.type))
+    return events
 
 
 def _int_or_none(value) -> int | None:

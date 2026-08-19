@@ -1,5 +1,6 @@
 from app.infrastructure.providers.contracts.api_football import (
     ApiFootballEnvelope,
+    ApiFootballEventsResponse,
     ApiFootballFixturePlayersResponse,
     ApiFootballFixturesResponse,
     ApiFootballPlayersResponse,
@@ -14,6 +15,7 @@ from app.infrastructure.providers.contracts.openfootball import OpenFootballSeas
 from app.infrastructure.providers.contracts.statsbomb import StatsBombEventRecord
 
 __all__ = [
+    "ApiFootballEventsResponse",
     "ApiFootballEnvelope",
     "ApiFootballFixturePlayersResponse",
     "ApiFootballFixturesResponse",

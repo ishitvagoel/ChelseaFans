@@ -15,6 +15,7 @@ from app.infrastructure.cache.upstash import UpstashRestCache
 from app.infrastructure.db.engine import create_schema, make_engine, make_session_factory
 from app.infrastructure.db.null_repository import NullSnapshotRepository
 from app.infrastructure.db.repository import SqlModelSnapshotRepository
+from app.infrastructure.demo.data import PLAYERS
 from app.infrastructure.demo.provider import DemoProvider
 from app.infrastructure.directory import CompositePlayerDirectory
 from app.infrastructure.http.rate_limit import RateLimitedClient
@@ -50,7 +51,10 @@ async def build_container(settings: Settings) -> AppContainer:
         http_clients = _register_live(registry, settings)
 
     orchestrator = ProviderOrchestrator(registry, cache, snapshots)
-    directory = CompositePlayerDirectory(snapshots)
+    directory = CompositePlayerDirectory(
+        snapshots,
+        extra=list(PLAYERS.values()) if settings.use_demo_data else [],
+    )
     return AppContainer(
         settings=settings,
         cache=cache,
@@ -102,6 +106,7 @@ def _register_live(registry: ProviderRegistry, settings: Settings) -> list[RateL
         )
     registry.register_player_match_stats(api_football)
     registry.register_season_stats(api_football)
+    registry.register_historical_events(api_football)
     registry.register_historical_events(statsbomb)
     return [fd_http, af_http, open_http]
 
