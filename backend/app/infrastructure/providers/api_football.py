@@ -42,6 +42,7 @@ class ApiFootballProvider:
         self._api_key = api_key
         self._team_id = team_id
         self._base = base_url.rstrip("/")
+        self._squad: list[Player] | None = None
 
     def _headers(self) -> dict[str, str]:
         return {"x-apisports-key": self._api_key}
@@ -185,6 +186,11 @@ class ApiFootballProvider:
         return players[:20] if players else await self._list_squad(q)
 
     async def _list_squad(self, query: str = "") -> list[Player]:
+        q = query.lower().strip()
+        if self._squad is not None:
+            if not q:
+                return self._squad
+            return [player for player in self._squad if q in player.name.lower()][:40]
         response = await self._client.request(
             "GET",
             f"{self._base}/players/squads",
@@ -212,7 +218,7 @@ class ApiFootballProvider:
                         shirt_number=raw.number,
                     )
                 )
-        return players[:40]
+        return players[:40] if q else self._remember_squad(players)
 
     async def _resolve_fixture_id(self, match) -> int | None:
         raw_id = match.id
@@ -244,6 +250,11 @@ class ApiFootballProvider:
             if fixture_item_matches_clubs(item, match.home.name, match.away.name):
                 return item.fixture.id
         return None
+
+
+    def _remember_squad(self, players: list[Player]) -> list[Player]:
+        self._squad = players
+        return players
 
 
 def _season_start_year(label: str | None) -> int:

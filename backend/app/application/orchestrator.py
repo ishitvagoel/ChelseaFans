@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
-JUST_FINISHED_CACHE_VERSION = "v5"
+JUST_FINISHED_CACHE_VERSION = "v6"
 
 
 class ProviderOrchestrator:
@@ -32,38 +32,47 @@ class ProviderOrchestrator:
         self._team_hint = team_hint
 
     async def just_finished(self, limit: int) -> list[Match]:
-        cache_key = f"chelsea:just-finished:{JUST_FINISHED_CACHE_VERSION}:{limit}"
+        cache_key = f"chelsea:just-finished:{JUST_FINISHED_CACHE_VERSION}"
         cached = await self._cache.get_json(cache_key)
         if isinstance(cached, list) and cached:
             matches = [match_from_dict(item) for item in cached]
+            if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
+                return matches[:limit]
             matches = await self._backfill_if_needed(matches)
             await self._persist_just_finished(cache_key, matches)
-            return matches
+            return matches[:limit]
 
         snapshot = await self._snapshots.get(cache_key)
         stored = snapshot.payload.get("matches") if snapshot else None
         if isinstance(stored, list) and stored:
             matches = [match_from_dict(item) for item in stored]
+            if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
+                await self._cache.set_json(cache_key, stored, JUST_FINISHED_TTL)
+                return matches[:limit]
             matches = await self._backfill_if_needed(matches)
             await self._persist_just_finished(cache_key, matches)
-            return matches
+            return matches[:limit]
 
-        primary = await self._load_primary_fixtures(limit)
-        enriched = await self._enrich_matches(primary)
-        if primary and not any(match.player_stats for match in enriched):
-            rated = await self._load_rated_fixture_fallback(limit)
-            if rated:
-                enriched = await self._enrich_matches(
-                    rated,
-                    coverage_note=(
-                        "Showing rated fixtures from API-Football free-tier seasons (2022–2024). "
-                        "Current-season ratings need a paid API-Football plan."
-                    ),
-                )
+        rated = await self._load_rated_fixture_fallback(max(limit, 4))
+        if rated:
+            enriched = await self._enrich_matches(rated[:limit])
+        else:
+            primary = await self._load_primary_fixtures(limit)
+            enriched = await self._enrich_matches(primary)
+            if primary and not any(match.player_stats for match in enriched):
+                rated = await self._load_rated_fixture_fallback(limit)
+                if rated:
+                    enriched = await self._enrich_matches(
+                        rated,
+                        coverage_note=(
+                            "Showing rated fixtures from API-Football free-tier seasons (2022–2024). "
+                            "Current-season ratings need a paid API-Football plan."
+                        ),
+                    )
 
         if enriched:
             await self._persist_just_finished(cache_key, enriched)
-        return enriched
+        return enriched[:limit]
 
     async def team_context(self) -> TeamContext | None:
         cache_key = "chelsea:context"

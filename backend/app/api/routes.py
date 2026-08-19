@@ -38,7 +38,7 @@ async def meta(request: Request) -> MetaDto:
 @router.get("/chelsea/just-finished", response_model=list[MatchDto])
 async def just_finished(
     request: Request,
-    limit: int = Query(8, ge=1, le=10),
+    limit: int = Query(4, ge=1, le=10),
 ) -> list[MatchDto]:
     matches = await _just(request).execute(limit)
     return [match_dto(m) for m in matches]

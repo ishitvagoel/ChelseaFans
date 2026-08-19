@@ -11,3 +11,7 @@ export function MatchListSkeleton() {
     </div>
   );
 }
+
+export function ContextSkeleton() {
+  return <SkeletonBlock className="h-32" />;
+}

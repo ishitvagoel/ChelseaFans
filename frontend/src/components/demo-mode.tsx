@@ -3,24 +3,29 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { fetchMeta } from "../lib/api";
 import type { AppMeta } from "../lib/api-types";
 
-const DemoModeContext = createContext<AppMeta>({
-  demo: true,
-  message: "Sample data",
+type DemoModeValue = AppMeta & { ready: boolean };
+
+const DemoModeContext = createContext<DemoModeValue>({
+  demo: false,
+  message: "",
+  ready: false,
 });
 
 export function DemoModeProvider({ children }: { children: ReactNode }) {
-  const [meta, setMeta] = useState<AppMeta>({
-    demo: true,
-    message: "Sample data is enabled until live API keys are configured.",
+  const [meta, setMeta] = useState<DemoModeValue>({
+    demo: false,
+    message: "",
+    ready: false,
   });
 
   useEffect(() => {
     void fetchMeta()
-      .then(setMeta)
+      .then((next) => setMeta({ ...next, ready: true }))
       .catch(() => {
         setMeta({
           demo: true,
           message: "Sample data is enabled (API meta unavailable).",
+          ready: true,
         });
       });
   }, []);

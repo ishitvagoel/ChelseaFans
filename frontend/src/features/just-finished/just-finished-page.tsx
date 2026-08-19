@@ -4,27 +4,54 @@ import { fetchContext, fetchJustFinished } from "../../lib/api";
 import type { Match, TeamContext } from "../../lib/api-types";
 import { MatchCard } from "../../components/match-card";
 import { PageHero } from "../../components/page-hero";
-import { useDemoMode } from "../../components/demo-mode";
-import { MatchListSkeleton } from "../../components/skeletons";
+import { PageLoader } from "../../components/page-loader";
+import { ContextSkeleton } from "../../components/skeletons";
 import { TeamContextCard } from "../../components/team-context-card";
+import { useDemoMode } from "../../components/demo-mode";
 
 export function JustFinishedPage() {
-  const { demo } = useDemoMode();
+  const { demo, ready } = useDemoMode();
   const [matches, setMatches] = useState<Match[]>([]);
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingMatches, setLoadingMatches] = useState(true);
+  const [loadingContext, setLoadingContext] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchJustFinished(8), fetchContext()])
-      .then(([nextMatches, nextContext]) => {
-        setMatches(nextMatches);
-        setContext(nextContext);
+    let cancelled = false;
+    setLoadingContext(true);
+    void fetchContext()
+      .then((next) => {
+        if (!cancelled) setContext(next);
+      })
+      .catch(() => {
+        if (!cancelled) setContext(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingContext(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingMatches(true);
+    setError(null);
+    void fetchJustFinished(4)
+      .then((nextMatches) => {
+        if (!cancelled) setMatches(nextMatches);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to load");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoadingMatches(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -34,18 +61,27 @@ export function JustFinishedPage() {
           ? "The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can explore the product before connecting live keys."
           : "The last Chelsea results, with events and the ratings that mattered."}
       </PageHero>
-      <TeamContextCard context={loading ? null : context} />
-      {loading ? <MatchListSkeleton /> : null}
+      {loadingContext ? <ContextSkeleton /> : <TeamContextCard context={context} />}
+      {loadingMatches ? (
+        <PageLoader
+          label={ready && !demo ? "Fetching live Chelsea results…" : "Loading match centre…"}
+        />
+      ) : null}
       {error ? (
         <p className="rounded-2xl border border-chelsea-red/40 bg-chelsea-red/10 p-4 text-sm">
           Could not reach the API ({error}). Start FastAPI on port 8000 or check the Vercel backend service.
         </p>
       ) : null}
-      <div className="grid gap-4">
-        {matches.map((match) => (
-          <MatchCard key={match.id} match={match} />
-        ))}
-      </div>
+      {!loadingMatches ? (
+        <div className="grid gap-4">
+          {matches.map((match) => (
+            <MatchCard key={match.id} match={match} />
+          ))}
+          {matches.length === 0 && !error ? (
+            <p className="text-sm text-muted-foreground">No finished matches available yet.</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

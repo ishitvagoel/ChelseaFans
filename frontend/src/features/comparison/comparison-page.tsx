@@ -18,6 +18,7 @@ import {
 import { fetchComparison, fetchContext, searchPlayers } from "../../lib/api";
 import type { ComparisonResult, Player, TeamContext } from "../../lib/api-types";
 import { PageHero } from "../../components/page-hero";
+import { InlineLoader, PageLoader } from "../../components/page-loader";
 import { TeamContextCard } from "../../components/team-context-card";
 import { useDemoMode } from "../../components/demo-mode";
 import { Badge } from "../../components/ui/badge";
@@ -31,15 +32,17 @@ const LIVE_SEED_NAMES = ["palmer", "caicedo", "jackson", "neto", "colwill"];
 
 export function ComparisonPage() {
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<Player[]>([]);
+  const [squad, setSquad] = useState<Player[]>([]);
   const [selected, setSelected] = useState<Player[]>([]);
   const [seasonFrom, setSeasonFrom] = useState("2023/24");
   const [seasonTo, setSeasonTo] = useState("2024/25");
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { demo } = useDemoMode();
-  const [seeded, setSeeded] = useState(false);
+  const { demo, ready } = useDemoMode();
+  const [, setSeeded] = useState(false);
+  const [loadingSquad, setLoadingSquad] = useState(true);
+  const [loadingCompare, setLoadingCompare] = useState(false);
 
   useEffect(() => {
     void fetchContext()
@@ -48,43 +51,75 @@ export function ComparisonPage() {
   }, []);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      void searchPlayers(query)
-        .then((players) => {
-          setOptions(players);
-          if (!seeded && query === "" && players.length > 0) {
-            if (demo) {
-              setSelected(
-                players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)),
-              );
-            } else {
-              const live = players.filter((p) => p.id.startsWith("af-"));
-              const seededLive = LIVE_SEED_NAMES.map((name) =>
-                live.find((p) => p.name.toLowerCase().includes(name)),
-              ).filter((p): p is Player => Boolean(p));
-              setSelected(seededLive.slice(0, 3).length ? seededLive.slice(0, 3) : live.slice(0, 3));
-            }
-            setSeeded(true);
+    if (!ready) return;
+    let cancelled = false;
+    setLoadingSquad(true);
+    void searchPlayers("")
+      .then((players) => {
+        if (cancelled) return;
+        setSquad(players);
+        setSeeded((already) => {
+          if (already || players.length === 0) return already;
+          if (demo) {
+            setSelected(
+              players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)),
+            );
+          } else {
+            const live = players.filter((p) => p.id.startsWith("af-"));
+            const seededLive = LIVE_SEED_NAMES.map((name) =>
+              live.find((p) => p.name.toLowerCase().includes(name)),
+            ).filter((p): p is Player => Boolean(p));
+            setSelected(seededLive.length ? seededLive.slice(0, 3) : live.slice(0, 3));
           }
-        })
-        .catch(() => setOptions([]));
-    }, 200);
-    return () => window.clearTimeout(handle);
-  }, [query, demo, seeded]);
+          return true;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setSquad([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSquad(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, ready]);
 
   useEffect(() => {
     if (selected.length === 0) {
       setResult(null);
+      setLoadingCompare(false);
       return;
     }
+    let cancelled = false;
+    setLoadingCompare(true);
+    setError(null);
     void fetchComparison(
       selected.map((p) => p.id),
       seasonFrom,
       seasonTo,
     )
-      .then(setResult)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Compare failed"));
+      .then((next) => {
+        if (!cancelled) setResult(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Compare failed");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCompare(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selected, seasonFrom, seasonTo]);
+
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return squad;
+    return squad.filter(
+      (player) => player.name.toLowerCase().includes(q) || player.id.toLowerCase().includes(q),
+    );
+  }, [query, squad]);
 
   const barData = useMemo(() => {
     if (!result) return [];
@@ -130,6 +165,7 @@ export function ComparisonPage() {
           <div>
             <h2 className="font-display text-xl">Squad picker</h2>
             <p className="text-sm text-muted-foreground">{selected.length}/4 selected</p>
+            {loadingSquad ? <InlineLoader label="Loading squad…" /> : null}
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -169,32 +205,66 @@ export function ComparisonPage() {
               </select>
             </label>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {options.map((player) => {
-              const active = selected.some((item) => item.id === player.id);
-              return (
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selected.map((player) => (
                 <Button
-                  key={player.id}
-                  variant={active ? "gold" : "outline"}
+                  key={`selected-${player.id}`}
+                  type="button"
+                  variant="gold"
                   size="sm"
                   className="min-h-11 md:min-h-8"
-                  aria-pressed={active}
                   onClick={() => togglePlayer(player)}
                 >
-                  {player.shirt_number ? (
-                    <span className="mr-1 opacity-70">{player.shirt_number}</span>
-                  ) : null}
                   {player.name}
+                  <span className="ml-1 opacity-70">×</span>
                 </Button>
-              );
-            })}
+              ))}
+            </div>
+          ) : null}
+          <div className="flex max-h-48 flex-wrap content-start gap-2 overflow-y-auto rounded-xl border border-border/50 p-2">
+            {loadingSquad ? (
+              <InlineLoader label="Fetching Chelsea squad…" />
+            ) : options.length === 0 ? (
+              <p className="p-2 text-sm text-muted-foreground">No players match that search.</p>
+            ) : (
+              options.map((player) => {
+                const active = selected.some((item) => item.id === player.id);
+                return (
+                  <Button
+                    key={player.id}
+                    type="button"
+                    variant={active ? "gold" : "outline"}
+                    size="sm"
+                    className="min-h-11 md:min-h-8"
+                    aria-pressed={active}
+                    onClick={() => togglePlayer(player)}
+                  >
+                    {player.shirt_number ? (
+                      <span className="mr-1 opacity-70">{player.shirt_number}</span>
+                    ) : null}
+                    {player.name}
+                  </Button>
+                );
+              })
+            )}
           </div>
           {error ? <p className="text-sm text-chelsea-red">{error}</p> : null}
         </CardContent>
       </Card>
 
+      {loadingCompare ? <PageLoader label="Loading player comparison…" /> : null}
+      {!loadingCompare && selected.length === 0 ? (
+        <Card>
+          <CardContent className="pt-5 text-sm text-muted-foreground">
+            Pick at least one player to render comparison charts.
+          </CardContent>
+        </Card>
+      ) : null}
+      {!loadingCompare && result && result.players.length > 0 ? (
+        <>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-        {result?.players.map((item, index) => (
+        {result.players.map((item, index) => (
           <Card key={item.player.id} className="min-w-[82vw] snap-center overflow-hidden sm:min-w-[60vw] md:min-w-0">
             <div
               className="h-1"
@@ -220,8 +290,6 @@ export function ComparisonPage() {
           </Card>
         ))}
       </div>
-
-      {result && result.players.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card className="min-h-[280px]">
             <CardHeader>
@@ -299,13 +367,8 @@ export function ComparisonPage() {
             </CardContent>
           </Card>
         </div>
-      ) : (
-        <Card>
-          <CardContent className="pt-5 text-sm text-muted-foreground">
-            Pick at least one player to render comparison charts.
-          </CardContent>
-        </Card>
-      )}
+        </>
+      ) : null}
     </div>
   );
 }
