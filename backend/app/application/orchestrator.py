@@ -71,12 +71,18 @@ class ProviderOrchestrator:
                 sources=sources,
             )
             enriched.append(merged)
-            await self._snapshots.upsert_match(merged)
+            try:
+                await self._snapshots.upsert_match(merged)
+            except Exception:
+                logger.exception("snapshot persist failed for %s", match.id)
         payload = [match_to_dict(m) for m in enriched]
-        await self._cache.set_json(cache_key, payload, JUST_FINISHED_TTL)
-        await self._snapshots.put(
-            SnapshotRecord(key=cache_key, payload={"matches": payload}, stored_at=datetime.now(UTC))
-        )
+        try:
+            await self._cache.set_json(cache_key, payload, JUST_FINISHED_TTL)
+            await self._snapshots.put(
+                SnapshotRecord(key=cache_key, payload={"matches": payload}, stored_at=datetime.now(UTC))
+            )
+        except Exception:
+            logger.exception("cache or snapshot write failed for %s", cache_key)
         return enriched
 
     async def team_context(self) -> TeamContext | None:

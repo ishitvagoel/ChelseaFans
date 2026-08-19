@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     football_data_api_key: str = ""
     api_football_key: str = ""
     api_football_base_url: str = "https://v3.football.api-sports.io"
-    database_url: str = "sqlite+aiosqlite:///./chelsea.db"
+    database_url: str = "sqlite+aiosqlite:////tmp/chelsea.db"
     upstash_redis_rest_url: str = ""
     upstash_redis_rest_token: str = ""
     redis_url: str = ""
