@@ -1,0 +1,48 @@
+import type { TeamContext } from "../lib/api-types";
+import { formatNumber } from "../lib/utils";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Badge } from "./ui/badge";
+
+export function TeamContextCard({ context }: { context: TeamContext | null }) {
+  if (!context) {
+    return (
+      <Card>
+        <CardHeader>
+          <h2 className="font-display text-xl">Team context</h2>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">Standings unavailable.</CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl">{context.team_name}</h2>
+          <p className="text-sm text-muted-foreground">{context.competition}</p>
+        </div>
+        <Badge>Table</Badge>
+      </CardHeader>
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Stat label="Pos" value={formatNumber(context.position)} />
+        <Stat label="Pts" value={formatNumber(context.points)} />
+        <Stat label="Pld" value={formatNumber(context.played)} />
+        <Stat label="GD" value={formatNumber(context.goal_difference)} />
+        <div className="col-span-2 sm:col-span-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Form</p>
+          <p className="font-display text-2xl tracking-[0.3em] text-chelsea-gold">{context.form ?? "—"}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="font-display text-3xl tabular-nums">{value}</p>
+    </div>
+  );
+}
