@@ -88,6 +88,6 @@ cd frontend && npm test
 
 ## Deploy
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/FREE_TIER.md](docs/FREE_TIER.md).
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (Vercel Services: frontend + FastAPI on one domain) and [docs/FREE_TIER.md](docs/FREE_TIER.md).
 
 Frontend types should stay aligned with FastAPI OpenAPI (`GET /openapi.json` → `frontend/src/lib/api-types.ts`).

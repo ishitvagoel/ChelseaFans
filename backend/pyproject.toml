@@ -31,3 +31,6 @@ include = ["app*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
+
+[tool.vercel]
+entrypoint = "app.main:app"

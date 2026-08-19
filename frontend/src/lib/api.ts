@@ -1,6 +1,8 @@
 import type { ComparisonResult, Match, Player, TeamContext } from "./api-types";
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const BASE =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE}${path}`);
