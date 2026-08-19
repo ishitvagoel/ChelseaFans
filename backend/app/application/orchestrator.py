@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
-JUST_FINISHED_CACHE_VERSION = "v3"
+JUST_FINISHED_CACHE_VERSION = "v4"
 
 
 class ProviderOrchestrator:

@@ -26,12 +26,21 @@ class ApiFootballEnvelope(BaseModel):
         return str(self.errors)
 
 
+class ApiFootballFixtureStatus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    short: str | None = None
+    long: str | None = None
+    elapsed: int | str | None = None
+    extra: int | str | None = None
+
+
 class ApiFootballFixtureInfo(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: int
     date: str | None = None
-    status: dict[str, str | None] | None = None
+    status: ApiFootballFixtureStatus | None = None
 
 
 class ApiFootballTeamInfo(BaseModel):

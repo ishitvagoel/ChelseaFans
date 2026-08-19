@@ -4,7 +4,7 @@ Production-oriented app for Chelsea supporters: **Just Finished** matches (event
 
 - **Frontend:** Vite + React + TypeScript + Tailwind + shadcn-style UI (Vercel)
 - **Backend:** FastAPI BFF (Render / Railway / Fly)
-- **Database:** Neon (Lakebase Postgres) behind `ISnapshotRepository`
+- **Database:** Neon (Lakebase Postgres) behind `ISnapshotRepository`, persisted with **SQLModel** (FastAPI creator ORM)
 - **Cache:** Upstash Redis or TCP Redis, with in-memory fallback
 
 ## SOLID from conceptualization
