@@ -1,9 +1,11 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
+import { AppFooter } from "./components/app-footer";
 import { AppHeader } from "./components/app-header";
 import { DemoBanner } from "./components/demo-banner";
 import { DemoModeProvider } from "./components/demo-mode";
+import { MatchListSkeleton } from "./components/skeletons";
 import { ThemeProvider } from "./components/theme-provider";
 import { JustFinishedPage } from "./features/just-finished/just-finished-page";
 
@@ -17,15 +19,18 @@ export function App() {
     <ThemeProvider>
       <DemoModeProvider>
         <BrowserRouter>
-          <div className="min-h-screen">
+          <div className="flex min-h-screen flex-col">
             <AppHeader />
             <DemoBanner />
-            <Suspense fallback={<p className="px-4 py-8 text-muted-foreground">Loading…</p>}>
-              <Routes>
-                <Route path="/" element={<JustFinishedPage />} />
-                <Route path="/compare" element={<ComparisonPage />} />
-              </Routes>
-            </Suspense>
+            <main id="main" className="flex-1">
+              <Suspense fallback={<div className="page-wrap py-8"><MatchListSkeleton /></div>}>
+                <Routes>
+                  <Route path="/" element={<JustFinishedPage />} />
+                  <Route path="/compare" element={<ComparisonPage />} />
+                </Routes>
+              </Suspense>
+            </main>
+            <AppFooter />
           </div>
         </BrowserRouter>
       </DemoModeProvider>

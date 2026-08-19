@@ -8,12 +8,14 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
     return (
       <Card>
         <CardHeader>
-          <h2 className="font-display text-xl">Team context</h2>
+          <h2 className="font-display text-xl">Premier League picture</h2>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">Standings unavailable.</CardContent>
       </Card>
     );
   }
+
+  const form = (context.form ?? "").split("").filter(Boolean);
 
   return (
     <Card>
@@ -24,14 +26,27 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
         </div>
         <Badge>Table</Badge>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Stat label="Pos" value={formatNumber(context.position)} />
         <Stat label="Pts" value={formatNumber(context.points)} />
         <Stat label="Pld" value={formatNumber(context.played)} />
         <Stat label="GD" value={formatNumber(context.goal_difference)} />
-        <div className="col-span-2 sm:col-span-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Form</p>
-          <p className="font-display text-2xl tracking-[0.3em] text-chelsea-gold">{context.form ?? "—"}</p>
+        <div className="col-span-2 sm:col-span-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Form</p>
+          <div className="mt-2 flex gap-1">
+            {form.length === 0 ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              form.map((result, index) => (
+                <span
+                  key={`${result}-${index}`}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${formClass(result)}`}
+                >
+                  {result}
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -41,8 +56,21 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="font-display text-3xl tabular-nums">{value}</p>
     </div>
   );
+}
+
+function formClass(result: string): string {
+  switch (result) {
+    case "W":
+      return "bg-emerald-500/20 text-emerald-300";
+    case "D":
+      return "bg-chelsea-gold/20 text-chelsea-gold";
+    case "L":
+      return "bg-chelsea-red/20 text-red-300";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
 }

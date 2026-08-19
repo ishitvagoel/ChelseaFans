@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { fetchContext, fetchJustFinished } from "../../lib/api";
 import type { Match, TeamContext } from "../../lib/api-types";
 import { MatchCard } from "../../components/match-card";
+import { PageHero } from "../../components/page-hero";
+import { MatchListSkeleton } from "../../components/skeletons";
 import { TeamContextCard } from "../../components/team-context-card";
 
 export function JustFinishedPage() {
@@ -24,20 +26,16 @@ export function JustFinishedPage() {
   }, []);
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8">
-      <div>
-        <p className="text-sm uppercase tracking-[0.2em] text-chelsea-gold">Recent results</p>
-        <h1 className="font-display text-4xl sm:text-5xl">Just Finished</h1>
-        <p className="mt-2 max-w-2xl text-muted-foreground">
-          Last Chelsea matches with scores, events, and key player ratings. With demo mode on, this is curated sample
-          data — no live sports API keys required.
-        </p>
-      </div>
-      <TeamContextCard context={context} />
-      {loading ? <p className="text-muted-foreground">Loading matches…</p> : null}
+    <div className="page-wrap grid gap-6 py-8">
+      <PageHero kicker="Match centre" title="Just Finished">
+        The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can
+        explore the product before connecting live keys.
+      </PageHero>
+      <TeamContextCard context={loading ? null : context} />
+      {loading ? <MatchListSkeleton /> : null}
       {error ? (
-        <p className="rounded-xl border border-chelsea-red/40 bg-chelsea-red/10 p-4 text-sm">
-          Could not reach the API ({error}). Start FastAPI on port 8000 or set VITE_API_BASE_URL.
+        <p className="rounded-2xl border border-chelsea-red/40 bg-chelsea-red/10 p-4 text-sm">
+          Could not reach the API ({error}). Start FastAPI on port 8000 or check the Vercel backend service.
         </p>
       ) : null}
       <div className="grid gap-4">
