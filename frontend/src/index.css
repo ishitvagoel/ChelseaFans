@@ -35,6 +35,7 @@
   body,
   #root {
     min-height: 100%;
+    min-height: 100dvh;
   }
 
   body {
@@ -70,14 +71,18 @@
 
 @layer components {
   .page-wrap {
-    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
   }
 
   .field-input {
-    @apply h-11 rounded-xl border border-border bg-background/70 px-3 text-sm outline-none ring-chelsea-gold/0 transition focus:border-chelsea-gold focus:ring-2 focus:ring-chelsea-gold/30;
+    @apply h-11 min-h-11 w-full rounded-xl border border-border bg-background/70 px-3 text-sm outline-none ring-chelsea-gold/0 transition focus:border-chelsea-gold focus:ring-2 focus:ring-chelsea-gold/30 sm:w-auto;
   }
 
   .skeleton {
     @apply animate-pulse rounded-xl bg-muted/80;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
   }
 }

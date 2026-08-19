@@ -108,7 +108,7 @@ export function ComparisonPage() {
   }
 
   return (
-    <div className="page-wrap grid gap-6 py-8">
+    <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
       <PageHero kicker="Historical lens" title="Player comparison">
         Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics; career totals stay on the right.
         {demo ? " Sample players are pre-selected so the charts appear immediately." : ""}
@@ -138,7 +138,7 @@ export function ComparisonPage() {
               <select
                 value={seasonFrom}
                 onChange={(event) => setSeasonFrom(event.target.value)}
-                className="field-input w-28"
+                className="field-input w-full sm:w-32"
               >
                 {SEASONS.map((season) => (
                   <option key={season}>{season}</option>
@@ -150,7 +150,7 @@ export function ComparisonPage() {
               <select
                 value={seasonTo}
                 onChange={(event) => setSeasonTo(event.target.value)}
-                className="field-input w-28"
+                className="field-input w-full sm:w-32"
               >
                 {SEASONS.map((season) => (
                   <option key={season}>{season}</option>
@@ -166,6 +166,7 @@ export function ComparisonPage() {
                   key={player.id}
                   variant={active ? "gold" : "outline"}
                   size="sm"
+                  className="min-h-11 md:min-h-8"
                   aria-pressed={active}
                   onClick={() => togglePlayer(player)}
                 >
@@ -181,9 +182,9 @@ export function ComparisonPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-4 [&::-webkit-scrollbar]:hidden">
         {result?.players.map((item, index) => (
-          <Card key={item.player.id} className="overflow-hidden">
+          <Card key={item.player.id} className="min-w-[82vw] snap-center overflow-hidden sm:min-w-[60vw] md:min-w-0">
             <div
               className="h-1"
               style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
@@ -211,11 +212,11 @@ export function ComparisonPage() {
 
       {result && result.players.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="min-h-[320px]">
+          <Card className="min-h-[280px]">
             <CardHeader>
               <h3 className="font-display text-xl">Season bars</h3>
             </CardHeader>
-            <CardContent className="h-72">
+            <CardContent className="h-64 sm:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(219,161,17,0.12)" />
@@ -235,7 +236,7 @@ export function ComparisonPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          <Card className="min-h-[320px]">
+          <Card className="hidden min-h-[320px] md:block">
             <CardHeader>
               <h3 className="font-display text-xl">Season radar</h3>
             </CardHeader>

@@ -26,7 +26,7 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
         </div>
         <Badge>Table</Badge>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <CardContent className="grid grid-cols-2 gap-4 overflow-x-auto sm:grid-cols-5">
         <Stat label="Pos" value={formatNumber(context.position)} />
         <Stat label="Pts" value={formatNumber(context.points)} />
         <Stat label="Pld" value={formatNumber(context.played)} />

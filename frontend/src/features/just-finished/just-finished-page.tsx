@@ -26,7 +26,7 @@ export function JustFinishedPage() {
   }, []);
 
   return (
-    <div className="page-wrap grid gap-6 py-8">
+    <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
       <PageHero kicker="Match centre" title="Just Finished">
         The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can
         explore the product before connecting live keys.
