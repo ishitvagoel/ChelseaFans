@@ -8,6 +8,7 @@ def test_health() -> None:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert "persistence" in response.json()
 
 
 def test_just_finished_demo() -> None:

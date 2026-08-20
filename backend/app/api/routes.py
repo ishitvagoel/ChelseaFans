@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 
 from app.api.mappers import comparison_dto, context_dto, match_dto, player_dto
-from app.api.schemas import ComparisonDto, MatchDto, PlayerDto, TeamContextDto
+from app.api.schemas import ComparisonDto, MatchDto, MetaDto, PlayerDto, TeamContextDto
 from app.application.comparison import ComparisonService
 from app.application.just_finished import JustFinishedService
 
@@ -18,10 +18,28 @@ def _compare(request: Request) -> ComparisonService:
     return request.app.state.container.comparison
 
 
+@router.get("/meta", response_model=MetaDto)
+async def meta(request: Request) -> MetaDto:
+    demo = bool(request.app.state.container.demo)
+    if demo:
+        message = "Sample data is enabled (USE_DEMO_DATA=true). Live sports APIs are not called."
+        notes: list[str] = []
+    else:
+        message = "Live providers are enabled. Set USE_DEMO_DATA=true to force sample data."
+        notes = [
+            "football-data.org free: current-season fixtures, scores, PL table (~10 req/min; no lineups on base free).",
+            "API-Football free: player ratings and events on seasons 2022–2024 only (~100 req/day).",
+            "Just Finished prefers current scores; ratings attach only when the match season is on the free tier.",
+            "StatsBomb open data: optional historical events when match id is mapped.",
+            "openfootball: fallback scores from public JSON dumps.",
+        ]
+    return MetaDto(demo=demo, message=message, provider_notes=notes)
+
+
 @router.get("/chelsea/just-finished", response_model=list[MatchDto])
 async def just_finished(
     request: Request,
-    limit: int = Query(8, ge=1, le=10),
+    limit: int = Query(4, ge=1, le=10),
 ) -> list[MatchDto]:
     matches = await _just(request).execute(limit)
     return [match_dto(m) for m in matches]

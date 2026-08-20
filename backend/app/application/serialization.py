@@ -53,6 +53,14 @@ def match_to_dict(match: Match) -> dict:
     }
 
 
+def player_stats_to_dict(s: PlayerMatchStats) -> dict:
+    return _player_stats_to_dict(s)
+
+
+def player_stats_from_dict(raw: dict) -> PlayerMatchStats:
+    return _player_stats_from_dict(raw)
+
+
 def _player_stats_to_dict(s: PlayerMatchStats) -> dict:
     return {
         "player": {

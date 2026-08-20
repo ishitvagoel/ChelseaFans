@@ -1,3 +1,9 @@
+export type AppMeta = {
+  demo: boolean;
+  message: string;
+  provider_notes?: string[];
+};
+
 export type Confidence = {
   source: string;
   score: number;

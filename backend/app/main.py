@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list(),
+        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -35,8 +36,11 @@ def create_app() -> FastAPI:
     app.include_router(router)
 
     @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
+    async def health() -> dict[str, object]:
+        container = getattr(app.state, "container", None)
+        demo = bool(getattr(container, "demo", True))
+        persistence = bool(getattr(container, "persistence", False))
+        return {"status": "ok", "demo": demo, "persistence": persistence}
 
     return app
 

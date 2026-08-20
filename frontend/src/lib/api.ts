@@ -1,6 +1,17 @@
-import type { ComparisonResult, Match, Player, TeamContext } from "./api-types";
+import type { AppMeta, ComparisonResult, Match, Player, TeamContext } from "./api-types";
 
-const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+function apiBase(): string {
+  const configured = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
+  if (import.meta.env.DEV) {
+    return configured || "http://localhost:8000";
+  }
+  if (configured && !configured.includes("localhost") && !configured.includes("127.0.0.1")) {
+    return configured;
+  }
+  return "";
+}
+
+const BASE = apiBase();
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE}${path}`);
@@ -8,6 +19,10 @@ async function getJson<T>(path: string): Promise<T> {
     throw new Error(`Request failed ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+export function fetchMeta(): Promise<AppMeta> {
+  return getJson("/v1/meta");
 }
 
 export function fetchJustFinished(limit = 8): Promise<Match[]> {

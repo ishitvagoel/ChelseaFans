@@ -8,7 +8,7 @@ from app.infrastructure.demo.data import PLAYERS
 class CompositePlayerDirectory:
     def __init__(self, snapshots: ISnapshotRepository, extra: list[Player] | None = None) -> None:
         self._snapshots = snapshots
-        self._extra = extra or list(PLAYERS.values())
+        self._extra = list(PLAYERS.values()) if extra is None else extra
 
     async def search(self, query: str) -> list[Player]:
         q = query.lower().strip()
