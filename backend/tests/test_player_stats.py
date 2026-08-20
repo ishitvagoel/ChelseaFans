@@ -22,6 +22,7 @@ from app.infrastructure.db.null_repository import NullSnapshotRepository
 from app.infrastructure.providers.api_football import ApiFootballProvider, _map_event
 from app.infrastructure.providers.api_football_helpers import club_names_match, season_accessible_on_free_tier
 from app.infrastructure.providers.contracts.api_football import ApiFootballEventRecord
+from tests.fakes import CountingFixtureProvider
 
 
 def test_club_names_match_normalizes_suffixes() -> None:
@@ -183,6 +184,31 @@ async def test_backfill_fills_matches_that_are_still_missing_stats() -> None:
     assert result[1].player_stats
     assert result[1].player_stats[0].rating == 8.1
     assert stats.calls == ["af-missing"]
+
+
+@pytest.mark.asyncio
+async def test_empty_stats_are_negatively_cached() -> None:
+    match = Match(
+        id="fd-2024",
+        utc_kickoff=datetime(2024, 11, 9, tzinfo=UTC),
+        competition="Premier League",
+        home=ClubRef("Chelsea"),
+        away=ClubRef("Arsenal"),
+        score=Score(1, 1),
+        status=MatchStatus.FINISHED,
+        sources=(DataConfidence("football-data.org", 0.9),),
+    )
+    stats = CountingStatsProvider()
+    registry = ProviderRegistry()
+    registry.register_fixtures(CountingFixtureProvider([match]))
+    registry.register_player_match_stats(stats)
+    orch = ProviderOrchestrator(registry, InMemoryCache(), NullSnapshotRepository())
+    first = await orch.just_finished(1)
+    second = await orch.just_finished(1)
+    assert first[0].id == "fd-2024"
+    assert not first[0].player_stats
+    assert not second[0].player_stats
+    assert stats.calls == ["fd-2024"]
 
 
 class CountingStatsProvider:

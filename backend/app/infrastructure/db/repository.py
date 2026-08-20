@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.application.serialization import match_to_dict
@@ -81,6 +81,8 @@ class SqlModelSnapshotRepository:
                 existing.payload = payload
                 existing.kickoff = match.utc_kickoff
             for stats in match.player_stats:
+                if stats.player.id.startswith("demo-"):
+                    continue
                 prow = await session.get(PlayerRecordTable, stats.player.id)
                 if prow is None:
                     session.add(
@@ -93,3 +95,15 @@ class SqlModelSnapshotRepository:
                         )
                     )
             await session.commit()
+
+    async def purge_prefix(self, prefix: str) -> int:
+        pattern = f"{prefix}%"
+        async with self._factory() as session:
+            players = await session.execute(
+                delete(PlayerRecordTable).where(PlayerRecordTable.id.like(pattern))
+            )
+            matches = await session.execute(
+                delete(MatchRecordTable).where(MatchRecordTable.id.like(pattern))
+            )
+            await session.commit()
+            return int(players.rowcount or 0) + int(matches.rowcount or 0)

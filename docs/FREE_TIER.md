@@ -44,9 +44,9 @@ Compare season totals return nothing (not a silent 2024 substitute) when the req
 ## Caching policy
 
 - `chelsea:just-finished:v7` — 6 hours; stores up to 10 matches, responses are sliced by `limit`
-- `fixture:{match.id}:player_stats:v7` — 7 days (full stat payload)
+- `fixture:{match.id}:player_stats:v7` — 7 days (full stat payload); empty results cached 6 hours
+- `fixture:{match.id}:events:v7` — 7 days when events exist; empty results cached 6 hours
 - `chelsea:context` — 1 hour
-- `players:search:{q}` — 1 hour
 - Never cache HTTP 429/5xx as a successful empty payload
 
 ## Persistence

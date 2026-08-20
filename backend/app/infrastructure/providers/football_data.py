@@ -143,6 +143,6 @@ def _map_match(item) -> Match | None:
         venue=item.venue,
         matchday=item.matchday,
         sources=(
-            DataConfidence("football-data.org", 0.92, "Fixtures, scores, goals"),
+            DataConfidence("football-data.org", 0.92, "Fixtures and scores"),
         ),
     )

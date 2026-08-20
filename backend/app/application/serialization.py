@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from app.domain.models import (
@@ -81,6 +82,30 @@ def _player_stats_to_dict(s: PlayerMatchStats) -> dict:
         "tackles": s.tackles,
         "source": s.source,
     }
+
+
+def events_to_dicts(events: Sequence[MatchEvent]) -> list[dict]:
+    return [
+        {
+            "minute": event.minute,
+            "event_type": event.event_type.value,
+            "player_name": event.player_name,
+            "detail": event.detail,
+        }
+        for event in events
+    ]
+
+
+def events_from_dicts(raw: list) -> list[MatchEvent]:
+    return [
+        MatchEvent(
+            minute=item.get("minute"),
+            event_type=EventType(item.get("event_type", "OTHER")),
+            player_name=item.get("player_name"),
+            detail=item.get("detail"),
+        )
+        for item in raw
+    ]
 
 
 def match_from_dict(raw: dict) -> Match:

@@ -78,7 +78,10 @@ export function ComparisonPage() {
         seededRef.current = true;
       })
       .catch(() => {
-        if (!cancelled) setSquad([]);
+        if (!cancelled) {
+          setSquad([]);
+          setError("Could not load the Chelsea squad.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingSquad(false);
@@ -163,7 +166,7 @@ export function ComparisonPage() {
         Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics.
         {demo
           ? " Sample players are pre-selected so the charts appear immediately."
-          : " Live comparison uses API-Football free-tier seasons (2022–2024); career totals on the right are that same window, not a full professional career."}
+          : " Live comparison uses API-Football free-tier seasons (2022–2024). Career totals on the right sum that full window, not the selected seasons and not a professional career."}
       </PageHero>
       <TeamContextCard context={context} />
       <Card>
@@ -276,6 +279,13 @@ export function ComparisonPage() {
         <Card>
           <CardContent className="pt-5 text-sm text-muted-foreground">
             Pick at least one player to render comparison charts.
+          </CardContent>
+        </Card>
+      ) : null}
+      {!loadingCompare && selected.length > 0 && result && result.players.length === 0 ? (
+        <Card>
+          <CardContent className="pt-5 text-sm text-muted-foreground">
+            No comparable stats for the selected players in the free-tier season window (2022–2024).
           </CardContent>
         </Card>
       ) : null}

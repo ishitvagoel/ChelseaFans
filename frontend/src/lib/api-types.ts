@@ -21,9 +21,11 @@ export type Score = {
   away: number;
 };
 
+export type EventType = "GOAL" | "ASSIST" | "CARD" | "SUBSTITUTION" | "OTHER";
+
 export type MatchEvent = {
   minute: number | null;
-  event_type: string;
+  event_type: EventType;
   player_name: string | null;
   detail: string | null;
 };

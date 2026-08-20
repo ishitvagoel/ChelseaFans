@@ -4,7 +4,14 @@ import logging
 from datetime import UTC, datetime
 
 from app.application.registry import ProviderRegistry
-from app.application.serialization import match_from_dict, match_to_dict, player_stats_from_dict, player_stats_to_dict
+from app.application.serialization import (
+    events_from_dicts,
+    events_to_dicts,
+    match_from_dict,
+    match_to_dict,
+    player_stats_from_dict,
+    player_stats_to_dict,
+)
 from app.domain.interfaces import ICache, ISnapshotRepository
 from app.domain.models import DataConfidence, Match, SnapshotRecord, TeamContext
 from app.infrastructure.providers.api_football_helpers import season_accessible_on_free_tier
@@ -14,6 +21,8 @@ logger = logging.getLogger(__name__)
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
+PLAYER_STATS_EMPTY_TTL = 6 * 60 * 60
+EVENTS_EMPTY_TTL = 6 * 60 * 60
 JUST_FINISHED_CACHE_VERSION = "v7"
 JUST_FINISHED_STORE_LIMIT = 10
 RATINGS_COVERAGE_NOTE = (
@@ -42,10 +51,7 @@ class ProviderOrchestrator:
         cached = await self._cache.get_json(cache_key)
         if isinstance(cached, list) and cached:
             matches = [match_from_dict(item) for item in cached]
-            if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
-                return matches[:limit]
-            matches = await self._backfill_if_needed(matches)
-            await self._persist_just_finished(cache_key, matches)
+            matches = await self._maybe_backfill(cache_key, matches)
             return matches[:limit]
 
         snapshot = await self._snapshots.get(cache_key)
@@ -55,8 +61,7 @@ class ProviderOrchestrator:
             if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
                 await self._cache.set_json(cache_key, stored, JUST_FINISHED_TTL)
                 return matches[:limit]
-            matches = await self._backfill_if_needed(matches)
-            await self._persist_just_finished(cache_key, matches)
+            matches = await self._maybe_backfill(cache_key, matches)
             return matches[:limit]
 
         store_limit = max(limit, JUST_FINISHED_STORE_LIMIT)
@@ -181,8 +186,16 @@ class ProviderOrchestrator:
         except Exception:
             logger.exception("cache or snapshot write failed for %s", cache_key)
 
+    async def _maybe_backfill(self, cache_key: str, matches: list[Match]) -> list[Match]:
+        if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
+            return matches
+        updated = await self._backfill_if_needed(matches)
+        if updated is not matches:
+            await self._persist_just_finished(cache_key, updated)
+        return updated
+
     def _match_can_enrich(self, match: Match) -> bool:
-        if match.id.startswith(("af-", "sb-")):
+        if match.id.startswith("sb-"):
             return True
         return season_accessible_on_free_tier(match.utc_kickoff)
 
@@ -208,6 +221,9 @@ class ProviderOrchestrator:
         updated: list[Match] = []
         changed = False
         for match in matches:
+            if match.events:
+                updated.append(match)
+                continue
             extra = await self._enrich_events(match)
             if extra:
                 changed = True
@@ -270,7 +286,7 @@ class ProviderOrchestrator:
             return list(match.player_stats)
         cache_key = f"fixture:{match.id}:player_stats:{JUST_FINISHED_CACHE_VERSION}"
         cached = await self._cache.get_json(cache_key)
-        if isinstance(cached, list) and cached:
+        if isinstance(cached, list):
             return [player_stats_from_dict(item) for item in cached]
         for provider in self._registry.player_match_stats:
             try:
@@ -282,9 +298,14 @@ class ProviderOrchestrator:
                 payload = [player_stats_to_dict(stat) for stat in stats]
                 await self._cache.set_json(cache_key, payload, PLAYER_STATS_TTL)
                 return stats
+        await self._cache.set_json(cache_key, [], PLAYER_STATS_EMPTY_TTL)
         return []
 
     async def _enrich_events(self, match: Match):
+        cache_key = f"fixture:{match.id}:events:{JUST_FINISHED_CACHE_VERSION}"
+        cached = await self._cache.get_json(cache_key)
+        if isinstance(cached, list):
+            return events_from_dicts(cached)
         extra = []
         existing = {(event.minute, event.event_type, event.player_name) for event in match.events}
         for provider in self._registry.historical_events:
@@ -298,6 +319,8 @@ class ProviderOrchestrator:
                 if key not in existing:
                     extra.append(event)
                     existing.add(key)
+        ttl = PLAYER_STATS_TTL if extra else EVENTS_EMPTY_TTL
+        await self._cache.set_json(cache_key, events_to_dicts(extra), ttl)
         return extra
 
 

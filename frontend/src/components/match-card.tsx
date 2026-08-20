@@ -1,4 +1,4 @@
-import type { Match, MatchEvent, PlayerMatchStats } from "../lib/api-types";
+import type { EventType, Match, MatchEvent, PlayerMatchStats } from "../lib/api-types";
 import { formatKickoff, formatNumber } from "../lib/utils";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
@@ -104,7 +104,10 @@ function EventList({ events }: { events: MatchEvent[] }) {
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Events</p>
       <ul className="space-y-2 text-sm">
         {events.length === 0 ? (
-          <li className="text-muted-foreground">No events mapped</li>
+          <li className="text-muted-foreground">
+            No events for this fixture on the free football-data.org tier. API-Football events cover seasons
+            2022–2024 only.
+          </li>
         ) : (
           events.map((event, index) => (
             <li
@@ -179,7 +182,7 @@ function TeamSide({
   );
 }
 
-function labelEvent(eventType: string): string {
+function labelEvent(eventType: EventType): string {
   switch (eventType) {
     case "GOAL":
       return "Goal";
@@ -191,7 +194,9 @@ function labelEvent(eventType: string): string {
       return "Sub";
     case "OTHER":
       return "Event";
-    default:
-      return eventType;
+    default: {
+      const _exhaustive: never = eventType;
+      return _exhaustive;
+    }
   }
 }

@@ -25,3 +25,9 @@ class NullSnapshotRepository:
     async def upsert_match(self, match: Match) -> None:
         for stats in match.player_stats:
             self._players[stats.player.id] = stats.player
+
+    async def purge_prefix(self, prefix: str) -> int:
+        removed = [player_id for player_id in self._players if player_id.startswith(prefix)]
+        for player_id in removed:
+            del self._players[player_id]
+        return len(removed)

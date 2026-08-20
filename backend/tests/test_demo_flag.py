@@ -26,6 +26,20 @@ def test_meta_demo_flag() -> None:
 
 
 @pytest.mark.asyncio
+async def test_live_flag_does_not_register_api_football_without_key() -> None:
+    settings = Settings(
+        use_demo_data=False,
+        football_data_api_key="",
+        api_football_key="",
+        database_url="",
+    )
+    container = await build_container(settings)
+    assert container.demo is False
+    assert [p.name for p in container.registry.season_stats] == []
+    assert [p.name for p in container.registry.player_match_stats] == []
+
+
+@pytest.mark.asyncio
 async def test_demo_flag_registers_only_demo_provider() -> None:
     settings = Settings(use_demo_data=True, football_data_api_key="unused")
     container = await build_container(settings)

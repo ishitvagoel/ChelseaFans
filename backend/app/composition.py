@@ -55,6 +55,13 @@ async def build_container(settings: Settings) -> AppContainer:
         http_clients = _register_live(registry, settings)
 
     orchestrator = ProviderOrchestrator(registry, cache, snapshots)
+    if not settings.use_demo_data:
+        try:
+            removed = await snapshots.purge_prefix("demo-")
+            if removed:
+                logger.info("purged %s leftover demo snapshot rows", removed)
+        except Exception:
+            logger.exception("failed to purge leftover demo snapshot rows")
     directory = CompositePlayerDirectory(
         snapshots,
         extra=list(PLAYERS.values()) if settings.use_demo_data else [],
@@ -65,7 +72,7 @@ async def build_container(settings: Settings) -> AppContainer:
         snapshots=snapshots,
         registry=registry,
         just_finished=JustFinishedService(orchestrator),
-        comparison=ComparisonService(registry, directory),
+        comparison=ComparisonService(registry, directory, allow_demo=settings.use_demo_data),
         http_clients=http_clients,
         demo=settings.use_demo_data,
         persistence=engine is not None,
@@ -109,9 +116,9 @@ def _register_live(registry: ProviderRegistry, settings: Settings) -> list[RateL
                 settings.api_football_base_url,
             )
         )
-    registry.register_player_match_stats(api_football)
-    registry.register_season_stats(api_football)
-    registry.register_historical_events(api_football)
+        registry.register_player_match_stats(api_football)
+        registry.register_season_stats(api_football)
+        registry.register_historical_events(api_football)
     registry.register_historical_events(statsbomb)
     return [fd_http, af_http, open_http]
 

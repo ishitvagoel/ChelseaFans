@@ -16,6 +16,7 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
   }
 
   const form = (context.form ?? "").split("").filter(Boolean);
+  const seasonNotStarted = context.played === 0;
 
   return (
     <Card>
@@ -24,31 +25,37 @@ export function TeamContextCard({ context }: { context: TeamContext | null }) {
           <h2 className="font-display text-2xl">{context.team_name}</h2>
           <p className="text-sm text-muted-foreground">{context.competition}</p>
         </div>
-        <Badge>Table</Badge>
+        <Badge>{seasonNotStarted ? "Pre-season" : "Table"}</Badge>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 overflow-x-auto sm:grid-cols-5">
-        <Stat label="Pos" value={formatNumber(context.position)} />
-        <Stat label="Pts" value={formatNumber(context.points)} />
-        <Stat label="Pld" value={formatNumber(context.played)} />
-        <Stat label="GD" value={formatNumber(context.goal_difference)} />
-        <div className="col-span-2 sm:col-span-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Form</p>
-          <div className="mt-2 flex gap-1">
-            {form.length === 0 ? (
-              <span className="text-muted-foreground">—</span>
-            ) : (
-              form.map((result, index) => (
-                <span
-                  key={`${result}-${index}`}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${formClass(result)}`}
-                >
-                  {result}
-                </span>
-              ))
-            )}
+      {seasonNotStarted ? (
+        <CardContent className="text-sm text-muted-foreground">
+          The Premier League season has not started yet. Table position is a placeholder until matchday 1.
+        </CardContent>
+      ) : (
+        <CardContent className="grid grid-cols-2 gap-4 overflow-x-auto sm:grid-cols-5">
+          <Stat label="Pos" value={formatNumber(context.position)} />
+          <Stat label="Pts" value={formatNumber(context.points)} />
+          <Stat label="Pld" value={formatNumber(context.played)} />
+          <Stat label="GD" value={formatNumber(context.goal_difference)} />
+          <div className="col-span-2 sm:col-span-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Form</p>
+            <div className="mt-2 flex gap-1">
+              {form.length === 0 ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                form.map((result, index) => (
+                  <span
+                    key={`${result}-${index}`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${formClass(result)}`}
+                  >
+                    {result}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 }
