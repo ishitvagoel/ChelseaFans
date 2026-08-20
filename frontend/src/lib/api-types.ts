@@ -1,3 +1,9 @@
+export type AppMeta = {
+  demo: boolean;
+  message: string;
+  provider_notes?: string[];
+};
+
 export type Confidence = {
   source: string;
   score: number;
@@ -15,9 +21,11 @@ export type Score = {
   away: number;
 };
 
+export type EventType = "GOAL" | "ASSIST" | "CARD" | "SUBSTITUTION" | "OTHER";
+
 export type MatchEvent = {
   minute: number | null;
-  event_type: string;
+  event_type: EventType;
   player_name: string | null;
   detail: string | null;
 };

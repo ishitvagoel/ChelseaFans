@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -17,50 +17,118 @@ import {
 
 import { fetchComparison, fetchContext, searchPlayers } from "../../lib/api";
 import type { ComparisonResult, Player, TeamContext } from "../../lib/api-types";
+import { PageHero } from "../../components/page-hero";
+import { InlineLoader, PageLoader } from "../../components/page-loader";
 import { TeamContextCard } from "../../components/team-context-card";
+import { useDemoMode } from "../../components/demo-mode";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader } from "../../components/ui/card";
 import { formatNumber } from "../../lib/utils";
 
-const PALETTE = ["#DBA111", "#034694", "#ED1C24", "#8ab4f8"];
+const PALETTE = ["#DBA111", "#6ea8ff", "#ED1C24", "#9ae6b4"];
+const SEASONS = ["2022/23", "2023/24", "2024/25"] as const;
+const LIVE_SEED_NAMES = ["palmer", "caicedo", "jackson", "neto", "colwill"];
+const DEMO_SEED_IDS = ["demo-palmer", "demo-jackson", "demo-caicedo"];
+
+function seasonStart(label: string): number {
+  return Number.parseInt(label.split("/")[0] ?? "0", 10);
+}
 
 export function ComparisonPage() {
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<Player[]>([]);
+  const [squad, setSquad] = useState<Player[]>([]);
   const [selected, setSelected] = useState<Player[]>([]);
   const [seasonFrom, setSeasonFrom] = useState("2023/24");
   const [seasonTo, setSeasonTo] = useState("2024/25");
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { demo, ready } = useDemoMode();
+  const seededRef = useRef(false);
+  const [loadingSquad, setLoadingSquad] = useState(true);
+  const [loadingCompare, setLoadingCompare] = useState(false);
 
   useEffect(() => {
-    void fetchContext().then(setContext).catch(() => setContext(null));
+    void fetchContext()
+      .then(setContext)
+      .catch(() => setContext(null));
   }, []);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      void searchPlayers(query)
-        .then(setOptions)
-        .catch(() => setOptions([]));
-    }, 200);
-    return () => window.clearTimeout(handle);
-  }, [query]);
+    if (!ready) return;
+    let cancelled = false;
+    setLoadingSquad(true);
+    void searchPlayers("")
+      .then((players) => {
+        if (cancelled) return;
+        setSquad(players);
+        if (seededRef.current || players.length === 0) return;
+        if (demo) {
+          const seeded = players.filter((p) => DEMO_SEED_IDS.includes(p.id));
+          if (seeded.length === 0) return;
+          setSelected(seeded);
+        } else {
+          const live = players.filter((p) => p.id.startsWith("af-"));
+          const seededLive = LIVE_SEED_NAMES.map((name) =>
+            live.find((p) => p.name.toLowerCase().includes(name)),
+          ).filter((p): p is Player => Boolean(p));
+          setSelected(seededLive.length ? seededLive.slice(0, 3) : live.slice(0, 3));
+        }
+        seededRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSquad([]);
+          setError("Could not load the Chelsea squad.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSquad(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, ready]);
 
   useEffect(() => {
     if (selected.length === 0) {
       setResult(null);
+      setLoadingCompare(false);
       return;
     }
+    let cancelled = false;
+    setLoadingCompare(true);
+    setError(null);
     void fetchComparison(
       selected.map((p) => p.id),
       seasonFrom,
       seasonTo,
     )
-      .then(setResult)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Compare failed"));
+      .then((next) => {
+        if (!cancelled) setResult(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setResult(null);
+          setError(err instanceof Error ? err.message : "Compare failed");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCompare(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selected, seasonFrom, seasonTo]);
+
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return squad;
+    return squad.filter(
+      (player) => player.name.toLowerCase().includes(q) || player.id.toLowerCase().includes(q),
+    );
+  }, [query, squad]);
 
   const barData = useMemo(() => {
     if (!result) return [];
@@ -74,7 +142,7 @@ export function ComparisonPage() {
         ...Object.fromEntries(result.players.map((p) => [p.player.name, p.season.assists ?? 0])),
       },
       {
-        metric: "Minutes / 90",
+        metric: "90s",
         ...Object.fromEntries(
           result.players.map((p) => [p.player.name, p.season.minutes ? Math.round(p.season.minutes / 90) : 0]),
         ),
@@ -93,66 +161,143 @@ export function ComparisonPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8">
-      <div>
-        <p className="text-sm uppercase tracking-[0.2em] text-chelsea-gold">Historical lens</p>
-        <h1 className="font-display text-4xl sm:text-5xl">Player comparison</h1>
-        <p className="mt-2 max-w-2xl text-muted-foreground">
-          Select 1–4 Chelsea players. Season filters apply to the left-hand metrics; career stays on the right.
-        </p>
-      </div>
+    <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
+      <PageHero kicker="Historical lens" title="Player comparison">
+        Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics.
+        {demo
+          ? " Sample players are pre-selected so the charts appear immediately."
+          : " Live comparison uses API-Football free-tier seasons (2022–2024). Career totals on the right sum that full window, not the selected seasons and not a professional career."}
+      </PageHero>
       <TeamContextCard context={context} />
       <Card>
-        <CardHeader>
-          <h2 className="font-display text-xl">Squad picker</h2>
+        <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-xl">Squad picker</h2>
+            <p className="text-sm text-muted-foreground">{selected.length}/4 selected</p>
+            {loadingSquad ? <InlineLoader label="Loading squad…" /> : null}
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <label className="sr-only" htmlFor="player-search">
+              Search players
+            </label>
             <input
+              id="player-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search Palmer, Caicedo, Neto…"
-              className="h-11 flex-1 rounded-xl border border-border bg-background px-3"
+              className="field-input flex-1"
             />
-            <select
-              value={seasonFrom}
-              onChange={(event) => setSeasonFrom(event.target.value)}
-              className="h-11 rounded-xl border border-border bg-background px-3"
-            >
-              <option>2023/24</option>
-              <option>2024/25</option>
-            </select>
-            <select
-              value={seasonTo}
-              onChange={(event) => setSeasonTo(event.target.value)}
-              className="h-11 rounded-xl border border-border bg-background px-3"
-            >
-              <option>2023/24</option>
-              <option>2024/25</option>
-            </select>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              From
+              <select
+                value={seasonFrom}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setSeasonFrom(next);
+                  if (seasonStart(next) > seasonStart(seasonTo)) {
+                    setSeasonTo(next);
+                  }
+                }}
+                className="field-input w-full sm:w-32"
+              >
+                {SEASONS.map((season) => (
+                  <option key={season}>{season}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              To
+              <select
+                value={seasonTo}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setSeasonTo(next);
+                  if (seasonStart(seasonFrom) > seasonStart(next)) {
+                    setSeasonFrom(next);
+                  }
+                }}
+                className="field-input w-full sm:w-32"
+              >
+                {SEASONS.map((season) => (
+                  <option key={season}>{season}</option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {options.map((player) => {
-              const active = selected.some((item) => item.id === player.id);
-              return (
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selected.map((player) => (
                 <Button
-                  key={player.id}
-                  variant={active ? "gold" : "outline"}
+                  key={`selected-${player.id}`}
+                  type="button"
+                  variant="gold"
                   size="sm"
+                  className="min-h-11 md:min-h-8"
                   onClick={() => togglePlayer(player)}
                 >
                   {player.name}
+                  <span className="ml-1 opacity-70">×</span>
                 </Button>
-              );
-            })}
+              ))}
+            </div>
+          ) : null}
+          <div className="flex max-h-48 flex-wrap content-start gap-2 overflow-y-auto rounded-xl border border-border/50 p-2">
+            {loadingSquad ? (
+              <InlineLoader label="Fetching Chelsea squad…" />
+            ) : options.length === 0 ? (
+              <p className="p-2 text-sm text-muted-foreground">No players match that search.</p>
+            ) : (
+              options.map((player) => {
+                const active = selected.some((item) => item.id === player.id);
+                return (
+                  <Button
+                    key={player.id}
+                    type="button"
+                    variant={active ? "gold" : "outline"}
+                    size="sm"
+                    className="min-h-11 md:min-h-8"
+                    aria-pressed={active}
+                    onClick={() => togglePlayer(player)}
+                  >
+                    {player.shirt_number ? (
+                      <span className="mr-1 opacity-70">{player.shirt_number}</span>
+                    ) : null}
+                    {player.name}
+                  </Button>
+                );
+              })
+            )}
           </div>
           {error ? <p className="text-sm text-chelsea-red">{error}</p> : null}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {result?.players.map((item, index) => (
-          <Card key={item.player.id}>
+      {loadingCompare ? <PageLoader label="Loading player comparison…" /> : null}
+      {!loadingCompare && selected.length === 0 ? (
+        <Card>
+          <CardContent className="pt-5 text-sm text-muted-foreground">
+            Pick at least one player to render comparison charts.
+          </CardContent>
+        </Card>
+      ) : null}
+      {!loadingCompare && selected.length > 0 && result && result.players.length === 0 ? (
+        <Card>
+          <CardContent className="pt-5 text-sm text-muted-foreground">
+            No comparable stats for the selected players in the free-tier season window (2022–2024).
+          </CardContent>
+        </Card>
+      ) : null}
+      {!loadingCompare && result && result.players.length > 0 ? (
+        <>
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+        {result.players.map((item, index) => (
+          <Card key={item.player.id} className="min-w-[82vw] snap-center overflow-hidden sm:min-w-[60vw] md:min-w-0">
+            <div
+              className="h-1"
+              style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
+            />
             <CardHeader>
               <Badge>#{index + 1}</Badge>
               <h3 className="font-display text-2xl">{item.player.name}</h3>
@@ -165,7 +310,7 @@ export function ComparisonPage() {
               <Metric label="Career G" value={formatNumber(item.career.goals)} />
               <Metric label="Season A" value={formatNumber(item.season.assists)} />
               <Metric label="Career A" value={formatNumber(item.career.assists)} />
-              <Metric label="Min" value={formatNumber(item.season.minutes)} />
+              <Metric label="Minutes" value={formatNumber(item.season.minutes)} />
               <Metric label="Rating" value={formatNumber(item.season.rating, 2)} />
               <Metric label="Prog. passes" value={formatNumber(item.season.progressive_passes)} />
               <Metric label="Prog. carries" value={formatNumber(item.season.progressive_carries)} />
@@ -173,29 +318,32 @@ export function ComparisonPage() {
           </Card>
         ))}
       </div>
-
-      {result && result.players.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="min-h-[320px]">
+          <Card className="min-h-[280px]">
             <CardHeader>
               <h3 className="font-display text-xl">Season bars</h3>
             </CardHeader>
-            <CardContent className="h-72">
+            <CardContent className="h-64 sm:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                  <XAxis dataKey="metric" stroke="currentColor" />
-                  <YAxis stroke="currentColor" />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(219,161,17,0.12)" />
+                  <XAxis dataKey="metric" stroke="currentColor" tick={{ fontSize: 12 }} />
+                  <YAxis stroke="currentColor" tick={{ fontSize: 12 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend />
                   {result.players.map((p, i) => (
-                    <Bar key={p.player.id} dataKey={p.player.name} fill={PALETTE[i % PALETTE.length]} />
+                    <Bar
+                      key={p.player.id}
+                      dataKey={p.player.name}
+                      fill={PALETTE[i % PALETTE.length]}
+                      radius={[6, 6, 0, 0]}
+                    />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          <Card className="min-h-[320px]">
+          <Card className="hidden min-h-[320px] md:block">
             <CardHeader>
               <h3 className="font-display text-xl">Season radar</h3>
             </CardHeader>
@@ -228,9 +376,9 @@ export function ComparisonPage() {
                     },
                   ]}
                 >
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="metric" />
-                  <PolarRadiusAxis />
+                  <PolarGrid stroke="rgba(219,161,17,0.25)" />
+                  <PolarAngleAxis dataKey="metric" tick={{ fill: "currentColor", fontSize: 12 }} />
+                  <PolarRadiusAxis tick={{ fill: "currentColor", fontSize: 10 }} />
                   {result.players.map((p, i) => (
                     <Radar
                       key={p.player.id}
@@ -238,7 +386,7 @@ export function ComparisonPage() {
                       dataKey={p.player.name}
                       stroke={PALETTE[i % PALETTE.length]}
                       fill={PALETTE[i % PALETTE.length]}
-                      fillOpacity={0.2}
+                      fillOpacity={0.18}
                     />
                   ))}
                   <Legend />
@@ -247,17 +395,23 @@ export function ComparisonPage() {
             </CardContent>
           </Card>
         </div>
-      ) : (
-        <p className="text-muted-foreground">Pick at least one player to render comparison charts.</p>
-      )}
+        </>
+      ) : null}
     </div>
   );
 }
 
+const tooltipStyle = {
+  background: "#0B1D36",
+  border: "1px solid #DBA111",
+  borderRadius: 12,
+  color: "#fff8e7",
+};
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="font-display text-2xl tabular-nums">{value}</p>
     </div>
   );

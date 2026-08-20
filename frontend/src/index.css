@@ -4,44 +4,58 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: 210 33% 97%;
     --foreground: 214 54% 12%;
     --card: 0 0% 100%;
     --card-foreground: 214 54% 12%;
     --primary: 211 96% 30%;
     --primary-foreground: 40 86% 96%;
     --muted: 210 30% 94%;
-    --muted-foreground: 215 16% 40%;
+    --muted-foreground: 215 16% 38%;
     --accent: 43 86% 46%;
     --accent-foreground: 214 54% 10%;
     --border: 214 20% 86%;
   }
 
   .dark {
-    --background: 216 70% 7%;
-    --foreground: 40 30% 96%;
-    --card: 215 58% 11%;
-    --card-foreground: 40 30% 96%;
+    --background: 218 62% 6%;
+    --foreground: 40 28% 96%;
+    --card: 216 48% 10%;
+    --card-foreground: 40 28% 96%;
     --primary: 211 96% 38%;
     --primary-foreground: 40 86% 96%;
-    --muted: 215 40% 16%;
-    --muted-foreground: 210 16% 72%;
+    --muted: 215 36% 14%;
+    --muted-foreground: 210 14% 70%;
     --accent: 43 86% 46%;
     --accent-foreground: 214 54% 10%;
-    --border: 214 32% 22%;
+    --border: 214 28% 18%;
   }
 
   html,
   body,
   #root {
     min-height: 100%;
+    min-height: 100dvh;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
+    background-color: hsl(var(--background));
     background-image:
-      radial-gradient(ellipse 80% 50% at 10% -10%, rgba(3, 70, 148, 0.45), transparent),
-      radial-gradient(ellipse 50% 40% at 100% 0%, rgba(219, 161, 17, 0.12), transparent);
+      radial-gradient(1200px 480px at 8% -8%, rgba(3, 70, 148, 0.42), transparent 55%),
+      radial-gradient(900px 420px at 100% 0%, rgba(219, 161, 17, 0.14), transparent 50%),
+      linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.18));
+  }
+
+  .light body {
+    background-image:
+      radial-gradient(1000px 400px at 0% -10%, rgba(3, 70, 148, 0.12), transparent 50%),
+      radial-gradient(700px 320px at 100% 0%, rgba(219, 161, 17, 0.1), transparent 45%);
+  }
+
+  ::selection {
+    background: #034694;
+    color: #fff8e7;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -52,5 +66,23 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer components {
+  .page-wrap {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .field-input {
+    @apply h-11 min-h-11 w-full rounded-xl border border-border bg-background/70 px-3 text-sm outline-none ring-chelsea-gold/0 transition focus:border-chelsea-gold focus:ring-2 focus:ring-chelsea-gold/30 sm:w-auto;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-xl bg-muted/80;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
   }
 }

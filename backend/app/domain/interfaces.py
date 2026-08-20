@@ -81,6 +81,9 @@ class ISnapshotRepository(Protocol):
     async def upsert_match(self, match: Match) -> None:
         ...
 
+    async def purge_prefix(self, prefix: str) -> int:
+        ...
+
 
 class IPlayerDirectory(Protocol):
     async def search(self, query: str) -> list[Player]:

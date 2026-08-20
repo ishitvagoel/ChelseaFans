@@ -4,15 +4,31 @@ import logging
 from datetime import UTC, datetime
 
 from app.application.registry import ProviderRegistry
-from app.application.serialization import match_from_dict, match_to_dict
+from app.application.serialization import (
+    events_from_dicts,
+    events_to_dicts,
+    match_from_dict,
+    match_to_dict,
+    player_stats_from_dict,
+    player_stats_to_dict,
+)
 from app.domain.interfaces import ICache, ISnapshotRepository
 from app.domain.models import DataConfidence, Match, SnapshotRecord, TeamContext
+from app.infrastructure.providers.api_football_helpers import season_accessible_on_free_tier
 
 logger = logging.getLogger(__name__)
 
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
+PLAYER_STATS_EMPTY_TTL = 6 * 60 * 60
+EVENTS_EMPTY_TTL = 6 * 60 * 60
+JUST_FINISHED_CACHE_VERSION = "v7"
+JUST_FINISHED_STORE_LIMIT = 10
+RATINGS_COVERAGE_NOTE = (
+    "Player ratings and API-Football events are available for free-tier seasons 2022–2024. "
+    "Current-season matches show scores only."
+)
 
 
 class ProviderOrchestrator:
@@ -31,53 +47,42 @@ class ProviderOrchestrator:
         self._team_hint = team_hint
 
     async def just_finished(self, limit: int) -> list[Match]:
-        cache_key = f"chelsea:just-finished:{limit}"
+        cache_key = f"chelsea:just-finished:{JUST_FINISHED_CACHE_VERSION}"
         cached = await self._cache.get_json(cache_key)
         if isinstance(cached, list) and cached:
-            return [match_from_dict(item) for item in cached]
-        snapshot = await self._snapshots.get(cache_key)
-        if snapshot and isinstance(snapshot.payload.get("matches"), list):
-            matches = [match_from_dict(item) for item in snapshot.payload["matches"]]
-            await self._cache.set_json(cache_key, snapshot.payload["matches"], JUST_FINISHED_TTL)
-            return matches
+            matches = [match_from_dict(item) for item in cached]
+            matches = await self._maybe_backfill(cache_key, matches)
+            return matches[:limit]
 
-        matches = await self._load_fixtures(limit)
-        enriched: list[Match] = []
-        for match in matches:
-            player_stats = await self._enrich_player_stats(match)
-            extra_events = await self._enrich_events(match)
-            events = match.events + tuple(extra_events)
-            sources = match.sources
-            if player_stats:
-                sources = sources + (
-                    DataConfidence(
-                        source=player_stats[0].source or "player-stats",
-                        score=0.85,
-                        coverage_notes="Per-fixture ratings/stats attached",
-                    ),
-                )
-            merged = Match(
-                id=match.id,
-                utc_kickoff=match.utc_kickoff,
-                competition=match.competition,
-                home=match.home,
-                away=match.away,
-                score=match.score,
-                status=match.status,
-                events=events,
-                player_stats=tuple(player_stats) if player_stats else match.player_stats,
-                venue=match.venue,
-                matchday=match.matchday,
-                sources=sources,
+        snapshot = await self._snapshots.get(cache_key)
+        stored = snapshot.payload.get("matches") if snapshot else None
+        if isinstance(stored, list) and stored:
+            matches = [match_from_dict(item) for item in stored]
+            if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
+                await self._cache.set_json(cache_key, stored, JUST_FINISHED_TTL)
+                return matches[:limit]
+            matches = await self._maybe_backfill(cache_key, matches)
+            return matches[:limit]
+
+        store_limit = max(limit, JUST_FINISHED_STORE_LIMIT)
+        primary = await self._load_primary_fixtures(store_limit)
+        if primary:
+            enriched = await self._enrich_matches(primary, coverage_note=RATINGS_COVERAGE_NOTE)
+        else:
+            rated = await self._load_rated_fixture_fallback(store_limit)
+            enriched = await self._enrich_matches(
+                rated,
+                coverage_note=(
+                    "No current-season finished matches were available; showing rated fixtures "
+                    "from API-Football free-tier seasons (2022–2024)."
+                    if rated
+                    else None
+                ),
             )
-            enriched.append(merged)
-            await self._snapshots.upsert_match(merged)
-        payload = [match_to_dict(m) for m in enriched]
-        await self._cache.set_json(cache_key, payload, JUST_FINISHED_TTL)
-        await self._snapshots.put(
-            SnapshotRecord(key=cache_key, payload={"matches": payload}, stored_at=datetime.now(UTC))
-        )
-        return enriched
+
+        if enriched:
+            await self._persist_just_finished(cache_key, enriched)
+        return enriched[:limit]
 
     async def team_context(self) -> TeamContext | None:
         cache_key = "chelsea:context"
@@ -95,8 +100,10 @@ class ProviderOrchestrator:
                 return ctx
         return None
 
-    async def _load_fixtures(self, limit: int) -> list[Match]:
+    async def _load_primary_fixtures(self, limit: int) -> list[Match]:
         for provider in self._registry.fixtures:
+            if provider.name == "api-football":
+                continue
             try:
                 matches = await provider.recent_finished(team_hint=self._team_hint, limit=limit)
             except Exception:
@@ -106,10 +113,181 @@ class ProviderOrchestrator:
                 return matches[:limit]
         return []
 
+    async def _load_rated_fixture_fallback(self, limit: int) -> list[Match]:
+        for provider in self._registry.fixtures:
+            if provider.name != "api-football":
+                continue
+            try:
+                matches = await provider.recent_finished(team_hint=self._team_hint, limit=limit)
+            except Exception:
+                logger.exception("rated fixture fallback failed for %s", provider.name)
+                continue
+            if matches:
+                return matches[:limit]
+        return []
+
+    async def _enrich_matches(
+        self,
+        matches: list[Match],
+        *,
+        coverage_note: str | None = None,
+    ) -> list[Match]:
+        enriched: list[Match] = []
+        for match in matches:
+            player_stats = await self._enrich_player_stats(match)
+            extra_events = await self._enrich_events(match)
+            events = match.events + tuple(extra_events)
+            sources = match.sources
+            if player_stats:
+                sources = sources + (
+                    DataConfidence(
+                        source=player_stats[0].source or "player-stats",
+                        score=0.85,
+                        coverage_notes="Per-fixture ratings/stats attached",
+                    ),
+                )
+            elif coverage_note:
+                sources = sources + (
+                    DataConfidence(
+                        source="api-football",
+                        score=0.4,
+                        coverage_notes=coverage_note,
+                    ),
+                )
+            enriched.append(
+                Match(
+                    id=match.id,
+                    utc_kickoff=match.utc_kickoff,
+                    competition=match.competition,
+                    home=match.home,
+                    away=match.away,
+                    score=match.score,
+                    status=match.status,
+                    events=events,
+                    player_stats=tuple(player_stats) if player_stats else match.player_stats,
+                    venue=match.venue,
+                    matchday=match.matchday,
+                    sources=sources,
+                )
+            )
+            try:
+                await self._snapshots.upsert_match(enriched[-1])
+            except Exception:
+                logger.exception("snapshot persist failed for %s", match.id)
+        return enriched
+
+    async def _persist_just_finished(self, cache_key: str, matches: list[Match]) -> None:
+        payload = [match_to_dict(match) for match in matches]
+        try:
+            await self._cache.set_json(cache_key, payload, JUST_FINISHED_TTL)
+            await self._snapshots.put(
+                SnapshotRecord(key=cache_key, payload={"matches": payload}, stored_at=datetime.now(UTC))
+            )
+        except Exception:
+            logger.exception("cache or snapshot write failed for %s", cache_key)
+
+    async def _maybe_backfill(self, cache_key: str, matches: list[Match]) -> list[Match]:
+        if not self._needs_stats_backfill(matches) and not self._needs_events_backfill(matches):
+            return matches
+        updated = await self._backfill_if_needed(matches)
+        if updated is not matches:
+            await self._persist_just_finished(cache_key, updated)
+        return updated
+
+    def _match_can_enrich(self, match: Match) -> bool:
+        if match.id.startswith("sb-"):
+            return True
+        return season_accessible_on_free_tier(match.utc_kickoff)
+
+    def _needs_stats_backfill(self, matches: list[Match]) -> bool:
+        if not matches or not self._registry.player_match_stats:
+            return False
+        return any(not match.player_stats and self._match_can_enrich(match) for match in matches)
+
+    def _needs_events_backfill(self, matches: list[Match]) -> bool:
+        if not matches or not self._registry.historical_events:
+            return False
+        return any(not match.events and self._match_can_enrich(match) for match in matches)
+
+    async def _backfill_if_needed(self, matches: list[Match]) -> list[Match]:
+        updated = matches
+        if self._needs_stats_backfill(updated):
+            updated = await self._backfill_player_stats(updated)
+        if self._needs_events_backfill(updated):
+            updated = await self._backfill_events(updated)
+        return updated
+
+    async def _backfill_events(self, matches: list[Match]) -> list[Match]:
+        updated: list[Match] = []
+        changed = False
+        for match in matches:
+            if match.events:
+                updated.append(match)
+                continue
+            extra = await self._enrich_events(match)
+            if extra:
+                changed = True
+                updated.append(
+                    Match(
+                        id=match.id,
+                        utc_kickoff=match.utc_kickoff,
+                        competition=match.competition,
+                        home=match.home,
+                        away=match.away,
+                        score=match.score,
+                        status=match.status,
+                        events=match.events + tuple(extra),
+                        player_stats=match.player_stats,
+                        venue=match.venue,
+                        matchday=match.matchday,
+                        sources=match.sources,
+                    )
+                )
+            else:
+                updated.append(match)
+        return updated if changed else matches
+
+    async def _backfill_player_stats(self, matches: list[Match]) -> list[Match]:
+        updated: list[Match] = []
+        changed = False
+        for match in matches:
+            stats = await self._enrich_player_stats(match)
+            if stats:
+                changed = True
+                sources = match.sources + (
+                    DataConfidence(
+                        source=stats[0].source or "player-stats",
+                        score=0.85,
+                        coverage_notes="Per-fixture ratings/stats attached",
+                    ),
+                )
+                updated.append(
+                    Match(
+                        id=match.id,
+                        utc_kickoff=match.utc_kickoff,
+                        competition=match.competition,
+                        home=match.home,
+                        away=match.away,
+                        score=match.score,
+                        status=match.status,
+                        events=match.events,
+                        player_stats=tuple(stats),
+                        venue=match.venue,
+                        matchday=match.matchday,
+                        sources=sources,
+                    )
+                )
+            else:
+                updated.append(match)
+        return updated if changed else matches
+
     async def _enrich_player_stats(self, match: Match):
         if match.player_stats:
             return list(match.player_stats)
-        cache_key = f"fixture:{match.id}:players"
+        cache_key = f"fixture:{match.id}:player_stats:{JUST_FINISHED_CACHE_VERSION}"
+        cached = await self._cache.get_json(cache_key)
+        if isinstance(cached, list):
+            return [player_stats_from_dict(item) for item in cached]
         for provider in self._registry.player_match_stats:
             try:
                 stats = await provider.stats_for_match(match)
@@ -117,17 +295,19 @@ class ProviderOrchestrator:
                 logger.exception("player stats %s failed", provider.name)
                 continue
             if stats:
-                await self._cache.set_json(
-                    cache_key,
-                    [{"id": s.player.id, "name": s.player.name} for s in stats],
-                    PLAYER_STATS_TTL,
-                )
+                payload = [player_stats_to_dict(stat) for stat in stats]
+                await self._cache.set_json(cache_key, payload, PLAYER_STATS_TTL)
                 return stats
+        await self._cache.set_json(cache_key, [], PLAYER_STATS_EMPTY_TTL)
         return []
 
     async def _enrich_events(self, match: Match):
+        cache_key = f"fixture:{match.id}:events:{JUST_FINISHED_CACHE_VERSION}"
+        cached = await self._cache.get_json(cache_key)
+        if isinstance(cached, list):
+            return events_from_dicts(cached)
         extra = []
-        existing = {(e.minute, e.event_type, e.player_name) for e in match.events}
+        existing = {(event.minute, event.event_type, event.player_name) for event in match.events}
         for provider in self._registry.historical_events:
             try:
                 events = await provider.events_for_match(match)
@@ -139,6 +319,8 @@ class ProviderOrchestrator:
                 if key not in existing:
                     extra.append(event)
                     existing.add(key)
+        ttl = PLAYER_STATS_TTL if extra else EVENTS_EMPTY_TTL
+        await self._cache.set_json(cache_key, events_to_dicts(extra), ttl)
         return extra
 
 
@@ -152,8 +334,8 @@ def _context_to_dict(ctx: TeamContext) -> dict:
         "form": ctx.form,
         "goal_difference": ctx.goal_difference,
         "sources": [
-            {"source": s.source, "score": s.score, "coverage_notes": s.coverage_notes}
-            for s in ctx.sources
+            {"source": source.source, "score": source.score, "coverage_notes": source.coverage_notes}
+            for source in ctx.sources
         ],
     }
 
@@ -169,10 +351,10 @@ def _context_from_dict(raw: dict) -> TeamContext:
         goal_difference=raw.get("goal_difference"),
         sources=tuple(
             DataConfidence(
-                source=s["source"],
-                score=s["score"],
-                coverage_notes=s.get("coverage_notes", ""),
+                source=source["source"],
+                score=source["score"],
+                coverage_notes=source.get("coverage_notes", ""),
             )
-            for s in raw.get("sources", [])
+            for source in raw.get("sources", [])
         ),
     )

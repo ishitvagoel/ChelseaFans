@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+from datetime import UTC, datetime, timedelta
 
 from app.domain.models import (
     ClubRef,
@@ -10,8 +11,27 @@ from app.domain.models import (
     MatchEvent,
     MatchStatus,
     Score,
+    TeamContext,
 )
 from app.infrastructure.http.rate_limit import RateLimitedClient
+from app.infrastructure.providers.contracts.football_data import (
+    FootballDataMatchListResponse,
+    FootballDataStandingsResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+FINISHED_LOOKBACK_DAYS = 400
+
+
+def finished_match_query_params() -> dict[str, str]:
+    end = datetime.now(UTC).date()
+    start = end - timedelta(days=FINISHED_LOOKBACK_DAYS)
+    return {
+        "status": "FINISHED",
+        "dateFrom": start.isoformat(),
+        "dateTo": end.isoformat(),
+    }
 
 
 class FootballDataProvider:
@@ -36,22 +56,23 @@ class FootballDataProvider:
             "GET",
             url,
             headers={"X-Auth-Token": self._api_key},
-            params={"status": "FINISHED", "limit": str(limit)},
+            params=finished_match_query_params(),
         )
         if response.status_code >= 400:
+            logger.warning("football-data.org matches HTTP %s", response.status_code)
             return []
-        data = response.json()
+        payload = FootballDataMatchListResponse.model_validate(response.json())
+        if payload.message:
+            logger.info("football-data.org: %s", payload.message)
         matches = []
-        for item in data.get("matches", [])[:limit]:
+        for item in payload.matches:
             mapped = _map_match(item)
-            if mapped is not None:
+            if mapped is not None and mapped.status == MatchStatus.FINISHED:
                 matches.append(mapped)
-        matches.sort(key=lambda m: m.utc_kickoff, reverse=True)
+        matches.sort(key=lambda match: match.utc_kickoff, reverse=True)
         return matches[:limit]
 
-    async def chelsea_context(self):
-        from app.domain.models import TeamContext
-
+    async def chelsea_context(self) -> TeamContext | None:
         if not self._api_key:
             return None
         url = "https://api.football-data.org/v4/competitions/PL/standings"
@@ -60,21 +81,22 @@ class FootballDataProvider:
         )
         if response.status_code >= 400:
             return None
-        data = response.json()
-        tables = data.get("standings") or []
-        if not tables:
+        payload = FootballDataStandingsResponse.model_validate(response.json())
+        if not payload.standings:
             return None
-        for row in tables[0].get("table", []):
-            team = row.get("team") or {}
-            if team.get("id") == self._team_id or team.get("name") == "Chelsea FC":
+        for row in payload.standings[0].table:
+            team = row.team
+            if team is None:
+                continue
+            if team.id == self._team_id or team.name == "Chelsea FC":
                 return TeamContext(
                     team_name="Chelsea",
                     competition="Premier League",
-                    position=row.get("position"),
-                    played=row.get("playedGames"),
-                    points=row.get("points"),
-                    form=row.get("form"),
-                    goal_difference=row.get("goalDifference"),
+                    position=row.position,
+                    played=row.played_games,
+                    points=row.points,
+                    form=row.form,
+                    goal_difference=row.goal_difference,
                     sources=(
                         DataConfidence(
                             self.name,
@@ -86,41 +108,41 @@ class FootballDataProvider:
         return None
 
 
-def _map_match(item: dict) -> Match | None:
+def _map_match(item) -> Match | None:
     try:
-        utc = datetime.fromisoformat(item["utcDate"].replace("Z", "+00:00"))
-    except (KeyError, ValueError):
+        utc = datetime.fromisoformat(item.utc_date.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
         return None
-    home = item.get("homeTeam") or {}
-    away = item.get("awayTeam") or {}
-    score_full = (item.get("score") or {}).get("fullTime") or {}
-    home_goals = score_full.get("home")
-    away_goals = score_full.get("away")
+    home = item.home_team
+    away = item.away_team
+    score_full = item.score.full_time if item.score else None
+    home_goals = score_full.home if score_full else None
+    away_goals = score_full.away if score_full else None
     events = []
-    for ev in item.get("goals") or []:
-        minute = (ev.get("minute") if isinstance(ev.get("minute"), int) else None)
-        scorer = (ev.get("scorer") or {}).get("name")
-        events.append(MatchEvent(minute, EventType.GOAL, scorer, ev.get("type")))
-    competition = (item.get("competition") or {}).get("name") or "Unknown"
-    status_raw = item.get("status") or "UNKNOWN"
+    for ev in item.goals or []:
+        minute = ev.minute if isinstance(ev.minute, int) else None
+        scorer = ev.scorer.name if ev.scorer else None
+        events.append(MatchEvent(minute, EventType.GOAL, scorer, ev.type))
+    competition = item.competition.name if item.competition else "Unknown"
+    status_raw = item.status or "UNKNOWN"
     try:
         status = MatchStatus(status_raw)
     except ValueError:
         status = MatchStatus.UNKNOWN
     return Match(
-        id=f"fd-{item.get('id')}",
+        id=f"fd-{item.id}",
         utc_kickoff=utc,
         competition=competition,
-        home=ClubRef(home.get("name") or "Home", home.get("tla"), home.get("crest")),
-        away=ClubRef(away.get("name") or "Away", away.get("tla"), away.get("crest")),
+        home=ClubRef(home.name or "Home", home.tla, home.crest),
+        away=ClubRef(away.name or "Away", away.tla, away.crest),
         score=None
         if home_goals is None or away_goals is None
         else Score(int(home_goals), int(away_goals)),
         status=status,
         events=tuple(events),
-        venue=(item.get("venue")),
-        matchday=item.get("matchday"),
+        venue=item.venue,
+        matchday=item.matchday,
         sources=(
-            DataConfidence("football-data.org", 0.92, "Fixtures, scores, goals"),
+            DataConfidence("football-data.org", 0.92, "Fixtures and scores"),
         ),
     )

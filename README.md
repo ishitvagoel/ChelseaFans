@@ -4,7 +4,7 @@ Production-oriented app for Chelsea supporters: **Just Finished** matches (event
 
 - **Frontend:** Vite + React + TypeScript + Tailwind + shadcn-style UI (Vercel)
 - **Backend:** FastAPI BFF (Render / Railway / Fly)
-- **Database:** Neon (Lakebase Postgres) behind `ISnapshotRepository`
+- **Database:** Neon (Lakebase Postgres) behind `ISnapshotRepository`, persisted with **SQLModel** (FastAPI creator ORM)
 - **Cache:** Upstash Redis or TCP Redis, with in-memory fallback
 
 ## SOLID from conceptualization
@@ -64,7 +64,7 @@ Specialized personas and hand-offs live in [AGENTS.md](AGENTS.md). The Architect
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env   # USE_DEMO_DATA=true works with no keys
+cp .env.example .env   # USE_DEMO_DATA=true is exclusive sample data; set false after adding keys
 uvicorn app.main:app --reload --port 8000
 
 # optional Redis
@@ -88,6 +88,8 @@ cd frontend && npm test
 
 ## Deploy
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/FREE_TIER.md](docs/FREE_TIER.md).
+Live: **https://chelsea-pocket.vercel.app** (Vercel project `chelsea-pocket`).
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (Vercel Services: frontend + FastAPI on one domain) and [docs/FREE_TIER.md](docs/FREE_TIER.md).
 
 Frontend types should stay aligned with FastAPI OpenAPI (`GET /openapi.json` → `frontend/src/lib/api-types.ts`).

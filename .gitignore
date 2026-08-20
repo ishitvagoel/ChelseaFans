@@ -20,3 +20,4 @@ frontend/.env
 *.db
 .coverage
 htmlcov/
+.vercel

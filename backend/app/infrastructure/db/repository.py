@@ -1,30 +1,34 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import delete, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.application.serialization import match_to_dict
 from app.domain.models import Match, Player, SnapshotRecord
-from app.infrastructure.db.tables import MatchRow, PlayerRow, SnapshotRow
+from app.infrastructure.db.models import MatchRecordTable, PlayerRecordTable, SnapshotRecordTable
 
 
-class SqlAlchemySnapshotRepository:
-    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+class SqlModelSnapshotRepository:
+    def __init__(self, factory) -> None:
         self._factory = factory
 
     async def get(self, key: str) -> SnapshotRecord | None:
         async with self._factory() as session:
-            row = await session.get(SnapshotRow, key)
+            row = await session.get(SnapshotRecordTable, key)
             if row is None:
                 return None
             return SnapshotRecord(key=row.key, payload=row.payload, stored_at=row.stored_at)
 
     async def put(self, record: SnapshotRecord) -> None:
         async with self._factory() as session:
-            existing = await session.get(SnapshotRow, record.key)
+            existing = await session.get(SnapshotRecordTable, record.key)
             if existing is None:
                 session.add(
-                    SnapshotRow(key=record.key, payload=record.payload, stored_at=record.stored_at)
+                    SnapshotRecordTable(
+                        key=record.key,
+                        payload=record.payload,
+                        stored_at=record.stored_at,
+                    )
                 )
             else:
                 existing.payload = record.payload
@@ -33,7 +37,7 @@ class SqlAlchemySnapshotRepository:
 
     async def list_players(self) -> list[Player]:
         async with self._factory() as session:
-            result = await session.scalars(select(PlayerRow))
+            result = await session.scalars(select(PlayerRecordTable))
             return [
                 Player(
                     id=row.id,
@@ -47,10 +51,10 @@ class SqlAlchemySnapshotRepository:
 
     async def upsert_player(self, player: Player) -> None:
         async with self._factory() as session:
-            existing = await session.get(PlayerRow, player.id)
+            existing = await session.get(PlayerRecordTable, player.id)
             if existing is None:
                 session.add(
-                    PlayerRow(
+                    PlayerRecordTable(
                         id=player.id,
                         name=player.name,
                         position=player.position,
@@ -68,19 +72,21 @@ class SqlAlchemySnapshotRepository:
     async def upsert_match(self, match: Match) -> None:
         payload = match_to_dict(match)
         async with self._factory() as session:
-            existing = await session.get(MatchRow, match.id)
+            existing = await session.get(MatchRecordTable, match.id)
             if existing is None:
                 session.add(
-                    MatchRow(id=match.id, payload=payload, kickoff=match.utc_kickoff)
+                    MatchRecordTable(id=match.id, payload=payload, kickoff=match.utc_kickoff)
                 )
             else:
                 existing.payload = payload
                 existing.kickoff = match.utc_kickoff
             for stats in match.player_stats:
-                prow = await session.get(PlayerRow, stats.player.id)
+                if stats.player.id.startswith("demo-"):
+                    continue
+                prow = await session.get(PlayerRecordTable, stats.player.id)
                 if prow is None:
                     session.add(
-                        PlayerRow(
+                        PlayerRecordTable(
                             id=stats.player.id,
                             name=stats.player.name,
                             position=stats.player.position,
@@ -89,3 +95,15 @@ class SqlAlchemySnapshotRepository:
                         )
                     )
             await session.commit()
+
+    async def purge_prefix(self, prefix: str) -> int:
+        pattern = f"{prefix}%"
+        async with self._factory() as session:
+            players = await session.execute(
+                delete(PlayerRecordTable).where(PlayerRecordTable.id.like(pattern))
+            )
+            matches = await session.execute(
+                delete(MatchRecordTable).where(MatchRecordTable.id.like(pattern))
+            )
+            await session.commit()
+            return int(players.rowcount or 0) + int(matches.rowcount or 0)

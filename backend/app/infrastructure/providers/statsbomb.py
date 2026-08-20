@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pydantic import TypeAdapter
+
 from app.domain.models import EventType, Match, MatchEvent
 from app.infrastructure.http.rate_limit import RateLimitedClient
+from app.infrastructure.providers.contracts.statsbomb import StatsBombEventRecord
 
 
 class StatsBombProvider:
@@ -11,12 +14,8 @@ class StatsBombProvider:
 
     def __init__(self, client: RateLimitedClient) -> None:
         self._client = client
-        self._index: list[dict] | None = None
 
     async def events_for_match(self, match: Match) -> list[MatchEvent]:
-        _ = match
-        # Mapping StatsBomb match IDs to live fixtures requires a full index download.
-        # Free-tier: only attempt if we already know a statsbomb id (prefix sb-).
         if not match.id.startswith("sb-"):
             return []
         match_id = match.id.removeprefix("sb-")
@@ -27,15 +26,16 @@ class StatsBombProvider:
         response = await self._client.request("GET", url)
         if response.status_code >= 400:
             return []
+        adapter = TypeAdapter(list[StatsBombEventRecord])
+        records = adapter.validate_python(response.json()[:80])
         events: list[MatchEvent] = []
-        for item in response.json()[:80]:
-            etype = (item.get("type") or {}).get("name")
-            minute = item.get("minute")
-            player = (item.get("player") or {}).get("name")
+        for item in records:
+            etype = item.type.name if item.type else None
             mapped = _map_event_type(etype)
             if mapped is None:
                 continue
-            events.append(MatchEvent(minute, mapped, player, etype))
+            player = item.player.name if item.player else None
+            events.append(MatchEvent(item.minute, mapped, player, etype))
         return events[:20]
 
 
