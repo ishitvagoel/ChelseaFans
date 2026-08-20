@@ -7,13 +7,19 @@ from app.application.registry import ProviderRegistry
 from app.application.serialization import match_from_dict, match_to_dict, player_stats_from_dict, player_stats_to_dict
 from app.domain.interfaces import ICache, ISnapshotRepository
 from app.domain.models import DataConfidence, Match, SnapshotRecord, TeamContext
+from app.infrastructure.providers.api_football_helpers import season_accessible_on_free_tier
 
 logger = logging.getLogger(__name__)
 
 JUST_FINISHED_TTL = 6 * 60 * 60
 CONTEXT_TTL = 60 * 60
 PLAYER_STATS_TTL = 7 * 24 * 60 * 60
-JUST_FINISHED_CACHE_VERSION = "v6"
+JUST_FINISHED_CACHE_VERSION = "v7"
+JUST_FINISHED_STORE_LIMIT = 10
+RATINGS_COVERAGE_NOTE = (
+    "Player ratings and API-Football events are available for free-tier seasons 2022–2024. "
+    "Current-season matches show scores only."
+)
 
 
 class ProviderOrchestrator:
@@ -53,22 +59,21 @@ class ProviderOrchestrator:
             await self._persist_just_finished(cache_key, matches)
             return matches[:limit]
 
-        rated = await self._load_rated_fixture_fallback(max(limit, 4))
-        if rated:
-            enriched = await self._enrich_matches(rated[:limit])
+        store_limit = max(limit, JUST_FINISHED_STORE_LIMIT)
+        primary = await self._load_primary_fixtures(store_limit)
+        if primary:
+            enriched = await self._enrich_matches(primary, coverage_note=RATINGS_COVERAGE_NOTE)
         else:
-            primary = await self._load_primary_fixtures(limit)
-            enriched = await self._enrich_matches(primary)
-            if primary and not any(match.player_stats for match in enriched):
-                rated = await self._load_rated_fixture_fallback(limit)
-                if rated:
-                    enriched = await self._enrich_matches(
-                        rated,
-                        coverage_note=(
-                            "Showing rated fixtures from API-Football free-tier seasons (2022–2024). "
-                            "Current-season ratings need a paid API-Football plan."
-                        ),
-                    )
+            rated = await self._load_rated_fixture_fallback(store_limit)
+            enriched = await self._enrich_matches(
+                rated,
+                coverage_note=(
+                    "No current-season finished matches were available; showing rated fixtures "
+                    "from API-Football free-tier seasons (2022–2024)."
+                    if rated
+                    else None
+                ),
+            )
 
         if enriched:
             await self._persist_just_finished(cache_key, enriched)
@@ -176,19 +181,20 @@ class ProviderOrchestrator:
         except Exception:
             logger.exception("cache or snapshot write failed for %s", cache_key)
 
+    def _match_can_enrich(self, match: Match) -> bool:
+        if match.id.startswith(("af-", "sb-")):
+            return True
+        return season_accessible_on_free_tier(match.utc_kickoff)
+
     def _needs_stats_backfill(self, matches: list[Match]) -> bool:
-        if not matches:
+        if not matches or not self._registry.player_match_stats:
             return False
-        if any(match.player_stats for match in matches):
-            return False
-        return any(provider.name == "api-football" for provider in self._registry.player_match_stats)
+        return any(not match.player_stats and self._match_can_enrich(match) for match in matches)
 
     def _needs_events_backfill(self, matches: list[Match]) -> bool:
-        if not matches:
+        if not matches or not self._registry.historical_events:
             return False
-        if any(match.events for match in matches):
-            return False
-        return any(provider.name == "api-football" for provider in self._registry.historical_events)
+        return any(not match.events and self._match_can_enrich(match) for match in matches)
 
     async def _backfill_if_needed(self, matches: list[Match]) -> list[Match]:
         updated = matches

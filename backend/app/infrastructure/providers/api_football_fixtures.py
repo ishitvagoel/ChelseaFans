@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from app.domain.models import ClubRef, DataConfidence, Match, MatchStatus, Score
 from app.infrastructure.http.rate_limit import RateLimitedClient
@@ -83,8 +84,6 @@ def _map_fixture(item: ApiFootballFixtureItem) -> Match | None:
     if not date_raw:
         return None
     try:
-        from datetime import datetime
-
         utc = datetime.fromisoformat(str(date_raw).replace("Z", "+00:00"))
     except ValueError:
         return None

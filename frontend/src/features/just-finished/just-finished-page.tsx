@@ -59,7 +59,7 @@ export function JustFinishedPage() {
       <PageHero kicker="Match centre" title="Just Finished">
         {demo
           ? "The last Chelsea results, with events and the ratings that mattered. Demo mode uses a curated sample so you can explore the product before connecting live keys."
-          : "The last Chelsea results, with events and the ratings that mattered."}
+          : "The last Chelsea results. Scores come from football-data.org; player ratings and events appear when API-Football's free tier covers the season (2022–2024)."}
       </PageHero>
       {loadingContext ? <ContextSkeleton /> : <TeamContextCard context={context} />}
       {loadingMatches ? (

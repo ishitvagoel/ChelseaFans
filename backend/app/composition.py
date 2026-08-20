@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from redis.asyncio import from_url as redis_from_url
@@ -26,6 +27,8 @@ from app.infrastructure.providers.openfootball import OpenFootballProvider
 from app.infrastructure.providers.statsbomb import StatsBombProvider
 from app.settings import Settings
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class AppContainer:
@@ -37,11 +40,12 @@ class AppContainer:
     comparison: ComparisonService
     http_clients: list[RateLimitedClient]
     demo: bool
+    persistence: bool
 
 
 async def build_container(settings: Settings) -> AppContainer:
     cache = await _build_cache(settings)
-    snapshots, _engine = await _build_snapshots(settings)
+    snapshots, engine = await _build_snapshots(settings)
     registry = ProviderRegistry()
     http_clients: list[RateLimitedClient] = []
 
@@ -64,6 +68,7 @@ async def build_container(settings: Settings) -> AppContainer:
         comparison=ComparisonService(registry, directory),
         http_clients=http_clients,
         demo=settings.use_demo_data,
+        persistence=engine is not None,
     )
 
 
@@ -131,4 +136,5 @@ async def _build_snapshots(settings: Settings) -> tuple[ISnapshotRepository, obj
         factory = make_session_factory(engine)
         return SqlModelSnapshotRepository(factory), engine
     except Exception:
+        logger.exception("database snapshot repository failed to initialize")
         return NullSnapshotRepository(), None

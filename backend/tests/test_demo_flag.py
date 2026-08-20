@@ -13,6 +13,7 @@ def test_health_reports_demo() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["demo"] is True
+    assert isinstance(body["persistence"], bool)
 
 
 def test_meta_demo_flag() -> None:

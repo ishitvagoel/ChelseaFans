@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -29,6 +29,11 @@ import { formatNumber } from "../../lib/utils";
 const PALETTE = ["#DBA111", "#6ea8ff", "#ED1C24", "#9ae6b4"];
 const SEASONS = ["2022/23", "2023/24", "2024/25"] as const;
 const LIVE_SEED_NAMES = ["palmer", "caicedo", "jackson", "neto", "colwill"];
+const DEMO_SEED_IDS = ["demo-palmer", "demo-jackson", "demo-caicedo"];
+
+function seasonStart(label: string): number {
+  return Number.parseInt(label.split("/")[0] ?? "0", 10);
+}
 
 export function ComparisonPage() {
   const [query, setQuery] = useState("");
@@ -40,7 +45,7 @@ export function ComparisonPage() {
   const [context, setContext] = useState<TeamContext | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { demo, ready } = useDemoMode();
-  const [, setSeeded] = useState(false);
+  const seededRef = useRef(false);
   const [loadingSquad, setLoadingSquad] = useState(true);
   const [loadingCompare, setLoadingCompare] = useState(false);
 
@@ -58,21 +63,19 @@ export function ComparisonPage() {
       .then((players) => {
         if (cancelled) return;
         setSquad(players);
-        setSeeded((already) => {
-          if (already || players.length === 0) return already;
-          if (demo) {
-            setSelected(
-              players.filter((p) => ["demo-palmer", "demo-jackson", "demo-caicedo"].includes(p.id)),
-            );
-          } else {
-            const live = players.filter((p) => p.id.startsWith("af-"));
-            const seededLive = LIVE_SEED_NAMES.map((name) =>
-              live.find((p) => p.name.toLowerCase().includes(name)),
-            ).filter((p): p is Player => Boolean(p));
-            setSelected(seededLive.length ? seededLive.slice(0, 3) : live.slice(0, 3));
-          }
-          return true;
-        });
+        if (seededRef.current || players.length === 0) return;
+        if (demo) {
+          const seeded = players.filter((p) => DEMO_SEED_IDS.includes(p.id));
+          if (seeded.length === 0) return;
+          setSelected(seeded);
+        } else {
+          const live = players.filter((p) => p.id.startsWith("af-"));
+          const seededLive = LIVE_SEED_NAMES.map((name) =>
+            live.find((p) => p.name.toLowerCase().includes(name)),
+          ).filter((p): p is Player => Boolean(p));
+          setSelected(seededLive.length ? seededLive.slice(0, 3) : live.slice(0, 3));
+        }
+        seededRef.current = true;
       })
       .catch(() => {
         if (!cancelled) setSquad([]);
@@ -103,7 +106,10 @@ export function ComparisonPage() {
         if (!cancelled) setResult(next);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Compare failed");
+        if (!cancelled) {
+          setResult(null);
+          setError(err instanceof Error ? err.message : "Compare failed");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingCompare(false);
@@ -154,10 +160,10 @@ export function ComparisonPage() {
   return (
     <div className="page-wrap grid gap-5 py-5 sm:gap-6 sm:py-8 md:py-10">
       <PageHero kicker="Historical lens" title="Player comparison">
-        Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics; career totals stay on the right.
+        Choose 1–4 Chelsea players. Season filters apply to the left-hand metrics.
         {demo
           ? " Sample players are pre-selected so the charts appear immediately."
-          : " Live comparison uses API-Football free-tier seasons (2022–2024)."}
+          : " Live comparison uses API-Football free-tier seasons (2022–2024); career totals on the right are that same window, not a full professional career."}
       </PageHero>
       <TeamContextCard context={context} />
       <Card>
@@ -184,7 +190,13 @@ export function ComparisonPage() {
               From
               <select
                 value={seasonFrom}
-                onChange={(event) => setSeasonFrom(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setSeasonFrom(next);
+                  if (seasonStart(next) > seasonStart(seasonTo)) {
+                    setSeasonTo(next);
+                  }
+                }}
                 className="field-input w-full sm:w-32"
               >
                 {SEASONS.map((season) => (
@@ -196,7 +208,13 @@ export function ComparisonPage() {
               To
               <select
                 value={seasonTo}
-                onChange={(event) => setSeasonTo(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setSeasonTo(next);
+                  if (seasonStart(seasonFrom) > seasonStart(next)) {
+                    setSeasonFrom(next);
+                  }
+                }}
                 className="field-input w-full sm:w-32"
               >
                 {SEASONS.map((season) => (

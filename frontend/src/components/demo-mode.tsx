@@ -23,8 +23,8 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
       .then((next) => setMeta({ ...next, ready: true }))
       .catch(() => {
         setMeta({
-          demo: true,
-          message: "Sample data is enabled (API meta unavailable).",
+          demo: false,
+          message: "",
           ready: true,
         });
       });

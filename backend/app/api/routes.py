@@ -27,8 +27,9 @@ async def meta(request: Request) -> MetaDto:
     else:
         message = "Live providers are enabled. Set USE_DEMO_DATA=true to force sample data."
         notes = [
-            "football-data.org free: fixtures, scores, PL table (~10 req/min; no lineups on base free).",
-            "API-Football free: player ratings on seasons 2022–2024 only (~100 req/day).",
+            "football-data.org free: current-season fixtures, scores, PL table (~10 req/min; no lineups on base free).",
+            "API-Football free: player ratings and events on seasons 2022–2024 only (~100 req/day).",
+            "Just Finished prefers current scores; ratings attach only when the match season is on the free tier.",
             "StatsBomb open data: optional historical events when match id is mapped.",
             "openfootball: fallback scores from public JSON dumps.",
         ]

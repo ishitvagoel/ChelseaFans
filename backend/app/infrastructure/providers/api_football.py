@@ -91,6 +91,13 @@ class ApiFootballProvider:
     async def events_for_match(self, match) -> list[MatchEvent]:
         if not self._api_key:
             return []
+        if not season_accessible_on_free_tier(match.utc_kickoff):
+            logger.debug(
+                "api-football events skipped for %s (season %s outside free tier)",
+                match.id,
+                season_start_year(match.utc_kickoff),
+            )
+            return []
         fixture_id = await self._resolve_fixture_id(match)
         if fixture_id is None:
             return []
@@ -130,7 +137,14 @@ class ApiFootballProvider:
             from_year, to_year = to_year, from_year
         seasons = [year for year in range(from_year, to_year + 1) if year in API_FOOTBALL_FREE_SEASONS]
         if not seasons:
-            seasons = [2024]
+            logger.info(
+                "api-football season totals skipped for %s: requested %s–%s is outside free-tier seasons %s",
+                player_id,
+                from_year,
+                to_year,
+                sorted(API_FOOTBALL_FREE_SEASONS),
+            )
+            return []
         rows: list[SeasonTotals] = []
         for season in seasons:
             response = await self._client.request(
@@ -227,6 +241,13 @@ class ApiFootballProvider:
                 return int(raw_id.removeprefix("af-"))
             except ValueError:
                 return None
+        if not season_accessible_on_free_tier(match.utc_kickoff):
+            logger.debug(
+                "api-football fixture lookup skipped for %s (season %s outside free tier)",
+                match.id,
+                season_start_year(match.utc_kickoff),
+            )
+            return None
         season = season_start_year(match.utc_kickoff)
         date = match.utc_kickoff.date().isoformat()
         response = await self._client.request(

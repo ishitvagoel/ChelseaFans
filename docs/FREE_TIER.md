@@ -17,16 +17,20 @@ Inbound HTTP JSON is validated with Pydantic models under `backend/app/infrastru
 
 | Source | Typical free constraint | Endpoints used | App behavior |
 |---|---|---|---|
-| football-data.org v4 | ~10 requests/minute; 12 competitions; no lineups/goals on base free | `GET /v4/teams/{id}/matches`, `GET /v4/competitions/PL/standings` | Primary Just Finished scores; date window required for FINISHED |
-| API-Football v3 | 100 requests/day; 10/min; **seasons 2022–2024 only** on free | `GET /fixtures`, `GET /fixtures/players`, `GET /players` | Player ratings + compare; falls back to rated 2024 fixtures when current season cannot enrich |
+| football-data.org v4 | ~10 requests/minute; 12 competitions; no lineups/goals on base free | `GET /v4/teams/{id}/matches`, `GET /v4/competitions/PL/standings` | **Primary** Just Finished scores for the current season; date window required for FINISHED |
+| API-Football v3 | 100 requests/day; 10/min; **seasons 2022–2024 only** on free | `GET /fixtures`, `GET /fixtures/players`, `GET /fixtures/events`, `GET /players` | Ratings, events, and compare stats **only** when the match/season is in 2022–2024. Last-resort fixtures if football-data.org and openfootball return nothing |
 | StatsBomb Open Data | GitHub raw JSON; be polite | `GET .../data/events/{id}.json` | Optional events when match id is `sb-*` |
-| openfootball | GitHub JSON | `GET football.json/{season}/en.1.json` | Fallback fixtures only |
+| openfootball | GitHub JSON | `GET football.json/{season}/en.1.json` | Fallback current-season scores if football-data.org is empty |
 
 Set `USE_DEMO_DATA=true` for UI work with zero third-party calls.
 
 ### Player ratings on free tier
 
-football-data.org supplies current-season scores. API-Football free tier cannot resolve fixtures for 2025/26, so the orchestrator falls back to the latest **rated** Chelsea fixtures from API-Football seasons 2022–2024 when enrichment fails. Upgrade API-Football for current-season `/fixtures/players`.
+Just Finished always prefers **current-season scores** from football-data.org (then openfootball). API-Football is an enrichment layer: `/fixtures/players` and `/fixtures/events` run only when `season_accessible_on_free_tier` is true (kickoff in 2022–2024). Current-season cards still show the score; ratings/events stay empty with an honest coverage note.
+
+Do **not** replace a current-season result list with older rated API-Football fixtures just to fill the ratings column.
+
+Compare season totals return nothing (not a silent 2024 substitute) when the requested range has no free-tier seasons.
 
 ## Platform quotas
 
@@ -39,12 +43,12 @@ football-data.org supplies current-season scores. API-Football free tier cannot 
 
 ## Caching policy
 
-- `chelsea:just-finished:v6` — 6 hours; sliced by `limit`
-- `fixture:{match.id}:player_stats:v5` — 7 days (full stat payload)
+- `chelsea:just-finished:v7` — 6 hours; stores up to 10 matches, responses are sliced by `limit`
+- `fixture:{match.id}:player_stats:v7` — 7 days (full stat payload)
 - `chelsea:context` — 1 hour
 - `players:search:{q}` — 1 hour
 - Never cache HTTP 429/5xx as a successful empty payload
 
 ## Persistence
 
-Snapshots and player rows use **SQLModel** (FastAPI creator ORM) via async SQLAlchemy sessions on Neon.
+Snapshots and player rows use **SQLModel** (FastAPI creator ORM) via async SQLAlchemy sessions on Neon. `/health` reports `persistence: true` only when that repository initialized successfully.

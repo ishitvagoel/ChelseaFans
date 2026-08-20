@@ -37,8 +37,10 @@ def create_app() -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, object]:
-        demo = bool(getattr(getattr(app.state, "container", None), "demo", True))
-        return {"status": "ok", "demo": demo}
+        container = getattr(app.state, "container", None)
+        demo = bool(getattr(container, "demo", True))
+        persistence = bool(getattr(container, "persistence", False))
+        return {"status": "ok", "demo": demo, "persistence": persistence}
 
     return app
 
